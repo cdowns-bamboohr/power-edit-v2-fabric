@@ -1,7 +1,9 @@
-import { useState, type ChangeEvent } from 'react';
+import { useState, useEffect, type ChangeEvent } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   IconV2,
+  IconTile,
+  Headline,
   Button,
   TextButton,
   IconButton,
@@ -11,7 +13,8 @@ import {
   Tabs,
   Tab,
   StandardModal,
-  SimpleSlidedown,
+  SlidedownPortal,
+  SLIDEDOWN_TYPES,
   Dropdown,
 } from '@bamboohr/fabric';
 import './PowerEditSessions.css';
@@ -168,11 +171,23 @@ export function PowerEditSessions() {
   const [drafts, setDrafts] = useState<EditSession[]>(DRAFTS);
   const [pendingDelete, setPendingDelete] = useState<EditSession | null>(null);
   const [pendingRevert, setPendingRevert] = useState<EditSession | null>(null);
-  const [slidedown, setSlidedown] = useState<{ message: string; type: 'success' | 'information' } | null>(() => {
-    if (incomingToast === 'published') return { message: `"${incomingName}" has been published successfully.`, type: 'success' };
-    if (incomingToast === 'draft') return { message: `"${incomingName}" has been saved as a draft.`, type: 'information' };
+  const [slidedownContent, setSlidedownContent] = useState<{ message: string; type: SLIDEDOWN_TYPES } | null>(() => {
+    if (incomingToast === 'published') return { message: `"${incomingName}" has been published successfully.`, type: SLIDEDOWN_TYPES.success };
+    if (incomingToast === 'draft') return { message: `"${incomingName}" has been saved as a draft.`, type: SLIDEDOWN_TYPES.success };
     return null;
   });
+  const [slidedownVisible, setSlidedownVisible] = useState(!!incomingToast);
+
+  function dismissSlidedown() {
+    setSlidedownVisible(false);
+    setTimeout(() => setSlidedownContent(null), 500);
+  }
+
+  useEffect(() => {
+    if (!slidedownVisible) return;
+    const t = setTimeout(() => dismissSlidedown(), 5000);
+    return () => clearTimeout(t);
+  }, [slidedownVisible]);
 
   function confirmDelete() {
     if (!pendingDelete) return;
@@ -183,16 +198,16 @@ export function PowerEditSessions() {
   const rows = activeTab === 'draft' ? drafts : COMPLETED;
 
   return (
-    <div className="power-edit-sessions">
-      {slidedown && (
-        <SimpleSlidedown
-          show
-          showDismiss
-          onDismiss={() => setSlidedown(null)}
-          message={slidedown.message}
-          type={slidedown.type}
+    <>
+      {slidedownContent && (
+        <SlidedownPortal
+          show={slidedownVisible}
+          onDismiss={dismissSlidedown}
+          message={slidedownContent.message}
+          type={slidedownContent.type}
         />
       )}
+    <div className="power-edit-sessions">
 
       {/* Back */}
       <div style={{ marginBottom: 12 }}>
@@ -361,12 +376,8 @@ export function PowerEditSessions() {
 
       {/* Revert confirmation modal */}
       <StandardModal isOpen={!!pendingRevert} onRequestClose={() => setPendingRevert(null)}>
-        <StandardModal.HeroHeadline
-          icon="rotate-left-solid"
-          iconColor="warning-strong"
-          text={`Revert "${pendingRevert?.name}"?`}
-        />
         <StandardModal.Body
+          renderHeader={<StandardModal.Header title="Just checking..." />}
           renderFooter={
             <StandardModal.Footer
               actions={[
@@ -393,13 +404,22 @@ export function PowerEditSessions() {
           }
         >
           <StandardModal.UpperContent>
-            <BodyText size="medium" color="neutral-medium">
-              This will unpublish all changes made in this edit and restore the affected employees to their previous values. The edit will move back to your drafts so you can make adjustments before republishing.
-            </BodyText>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 12, padding: '24px 0 16px', width: '100%' }}>
+              <IconTile
+                icon={<IconV2 name="rotate-left-regular" color="warning-strong" size={24} />}
+                size={56}
+                variant="muted"
+              />
+              <Headline size="small" component="h4" color="neutral-strong">Revert "{pendingRevert?.name}"?</Headline>
+              <BodyText size="medium" color="neutral-weak">
+                This will unpublish all changes and restore affected employees to their previous values. The edit will move back to your drafts.
+              </BodyText>
+            </div>
           </StandardModal.UpperContent>
         </StandardModal.Body>
       </StandardModal>
     </div>
+    </>
   );
 }
 

@@ -15,6 +15,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  position: relative;
+  z-index: 10;
 }
 
 .people-list-filter-left {
@@ -97,6 +99,15 @@
 
 .pill-dropdown__item--selected {
   background-color: var(--fabric-surface-color-primary-extra-weak, #e8f4e5);
+}
+
+/* Select field widths */
+.people-list-select-filter {
+  width: 160px;
+}
+
+.people-list-select-showing {
+  width: 192px;
 }
 
 /* People Count */

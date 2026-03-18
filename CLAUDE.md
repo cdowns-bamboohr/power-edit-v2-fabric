@@ -265,6 +265,59 @@ Modal (small: 608px | medium: 800px | full-screen)
     Small: 528px | Medium: 720px | Large: 912px
 ```
 
+### Confirmation Modal Pattern (CANONICAL)
+
+Use this exact structure for all confirmation modals (delete, cancel, warning, destructive actions).
+
+**Critical rules:**
+- `StandardModal.Header` MUST be passed via `renderHeader` on `StandardModal.Body` — NEVER as a sibling to `Body`. Placing it as a sibling renders it as a full-width banner outside the modal card.
+- Use `IconTile` (not a custom div) for the icon. Pass a `ReactElement` to the `icon` prop to control icon color independently from the tile background.
+- `variant="muted"` gives the neutral gray tile background.
+- Use `Headline size="small" component="h4"` for the modal body title.
+- Use `TextButton` (no `color` prop) for the secondary/destructive text action — defaults to blue link color.
+- Center all body content with `display: flex`, `flexDirection: column`, `alignItems: center`, `textAlign: center`, `width: 100%`.
+
+```tsx
+import { StandardModal, IconTile, IconV2, Headline, BodyText, Button, TextButton } from '@bamboohr/fabric';
+
+<StandardModal isOpen={isOpen} onRequestClose={onClose}>
+  <StandardModal.Body
+    renderHeader={<StandardModal.Header title="Just checking..." />}
+    renderFooter={
+      <StandardModal.Footer
+        actions={[
+          <TextButton key="secondary" onClick={onSecondaryAction}>Secondary action</TextButton>,
+          <Button key="primary" variant="contained" color="primary" onClick={onPrimaryAction}>
+            Primary action
+          </Button>,
+        ]}
+      />
+    }
+  >
+    <StandardModal.UpperContent>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 12, padding: '24px 0 16px', width: '100%' }}>
+        <IconTile
+          icon={<IconV2 name="triangle-exclamation-regular" color="warning-strong" size={24} />}
+          size={56}
+          variant="muted"
+        />
+        <Headline size="small" component="h4" color="neutral-strong">Headline goes here...</Headline>
+        <BodyText size="medium" color="neutral-weak">Supporting description goes here.</BodyText>
+      </div>
+    </StandardModal.UpperContent>
+  </StandardModal.Body>
+</StandardModal>
+```
+
+**Icon color by confirmation type:**
+
+| Type | Icon name | Icon color |
+|------|-----------|------------|
+| Warning / unsaved changes | `triangle-exclamation-regular` | `warning-strong` |
+| Delete / destructive | `trash-can-regular` | `error-strong` |
+| Info | `circle-info-regular` | `info-strong` |
+| Success | `circle-check-regular` | `success-strong` |
+
 ---
 
 ## Component Usage Guidance

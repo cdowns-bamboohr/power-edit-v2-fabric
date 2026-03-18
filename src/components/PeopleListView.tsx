@@ -8,6 +8,7 @@ import {
   Button,
   Link,
   Avatar,
+  SelectField,
 } from '@bamboohr/fabric';
 import { Pagination } from './Pagination';
 import type { Employee } from '../data/employees';
@@ -23,12 +24,8 @@ export function PeopleListView({ employees }: PeopleListViewProps) {
   const [filterStatus, setFilterStatus] = useState('all');
   const [showingFilter, setShowingFilter] = useState('active');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [isShowingOpen, setIsShowingOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const menuRef = useRef<HTMLDivElement>(null);
-  const filterRef = useRef<HTMLDivElement>(null);
-  const showingRef = useRef<HTMLDivElement>(null);
   const itemsPerPage = 50;
 
   useEffect(() => {
@@ -36,19 +33,13 @@ export function PeopleListView({ employees }: PeopleListViewProps) {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setIsMenuOpen(false);
       }
-      if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
-        setIsFilterOpen(false);
-      }
-      if (showingRef.current && !showingRef.current.contains(event.target as Node)) {
-        setIsShowingOpen(false);
-      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const statusOptions = [
-    { value: 'all', label: 'All Employees' },
+    { value: 'all', label: 'Employees' },
     { value: 'Full-Time', label: 'Full-Time' },
     { value: 'Part-Time', label: 'Part-Time' },
     { value: 'Contractor', label: 'Contractor' },
@@ -122,27 +113,17 @@ export function PeopleListView({ employees }: PeopleListViewProps) {
             size="medium"
           />
 
-          <div className="pill-dropdown" ref={filterRef}>
-            <button
-              className="pill-dropdown__trigger"
-              onClick={() => setIsFilterOpen(!isFilterOpen)}
+          <div className="people-list-select-filter">
+            <SelectField
+              size="medium"
+              variant="single"
+              value={filterStatus}
+              onChange={(e) => { setFilterStatus(e.target.value); setCurrentPage(1); }}
             >
-              <span>{statusOptions.find(o => o.value === filterStatus)?.label ?? 'All Employees'}</span>
-              <IconV2 name={isFilterOpen ? 'chevron-up-solid' : 'chevron-down-solid'} size={12} color="neutral-strong" />
-            </button>
-            {isFilterOpen && (
-              <div className="pill-dropdown__menu">
-                {statusOptions.map((opt) => (
-                  <button
-                    key={opt.value}
-                    className={`pill-dropdown__item${filterStatus === opt.value ? ' pill-dropdown__item--selected' : ''}`}
-                    onClick={() => { setFilterStatus(opt.value); setIsFilterOpen(false); setCurrentPage(1); }}
-                  >
-                    <BodyText size="medium">{opt.label}</BodyText>
-                  </button>
-                ))}
-              </div>
-            )}
+              {statusOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </SelectField>
           </div>
 
           <div className="people-list-count">
@@ -183,28 +164,19 @@ export function PeopleListView({ employees }: PeopleListViewProps) {
           </div>
         ) : (
           <div className="people-list-filter-right">
-            <div className="pill-dropdown" ref={showingRef}>
-              <button
-                className="pill-dropdown__trigger pill-dropdown__trigger--labeled"
-                onClick={() => setIsShowingOpen(!isShowingOpen)}
+            <div className="people-list-select-showing">
+              <SelectField
+                label="Showing"
+                labelPlacement="inline"
+                size="medium"
+                variant="single"
+                value={showingFilter}
+                onChange={(e) => { setShowingFilter(e.target.value); setCurrentPage(1); }}
               >
-                <BodyText size="small" weight="medium">Showing</BodyText>
-                <span>{showingOptions.find(o => o.value === showingFilter)?.label ?? 'Active'}</span>
-                <IconV2 name={isShowingOpen ? 'chevron-up-solid' : 'chevron-down-solid'} size={12} color="neutral-strong" />
-              </button>
-              {isShowingOpen && (
-                <div className="pill-dropdown__menu pill-dropdown__menu--right">
-                  {showingOptions.map((opt) => (
-                    <button
-                      key={opt.value}
-                      className={`pill-dropdown__item${showingFilter === opt.value ? ' pill-dropdown__item--selected' : ''}`}
-                      onClick={() => { setShowingFilter(opt.value); setIsShowingOpen(false); setCurrentPage(1); }}
-                    >
-                      <BodyText size="medium">{opt.label}</BodyText>
-                    </button>
-                  ))}
-                </div>
-              )}
+                {showingOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </SelectField>
             </div>
 
             <div className="people-list-menu-wrapper" ref={menuRef}>

@@ -3,7 +3,7 @@
  */
 
 .people-page {
-  padding: 32px;
+  padding: 32px 0;
   height: 100%;
   overflow-y: auto;
 }
@@ -21,6 +21,9 @@
 }
 
 .people-header-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 15px;
   color: var(--fabric-theme-color-primary-strong);
   text-decoration: none;
@@ -35,7 +38,15 @@
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  border-bottom: 1px solid var(--fabric-border-color-neutral-weak);
+  margin-bottom: 0;
+}
+
+/* Suppress the Tabs component's own bottom border so the Divider is the sole line */
+.people-tabs > * {
+  border-bottom: none !important;
+}
+
+.people-tab-divider {
   margin-bottom: 24px;
 }
 
@@ -44,6 +55,18 @@
   align-items: center;
   gap: 12px;
   padding-bottom: 16px;
+}
+
+/* Force primary green outlined style — mirrors .header-ask-btn */
+.people-primary-btn {
+  color: var(--color-primary-strong) !important;
+  border-color: var(--color-primary-strong) !important;
+}
+.people-primary-btn svg,
+.people-primary-btn [data-icon],
+.people-primary-btn path {
+  color: var(--color-primary-strong) !important;
+  fill: var(--color-primary-strong) !important;
 }
 
 .people-tabs {
@@ -106,7 +129,7 @@
 /* Responsive */
 @media (max-width: 768px) {
   .people-page {
-    padding: 24px;
+    padding: 24px 0;
   }
 
   .people-header {
@@ -128,7 +151,7 @@
 
 @media (max-width: 480px) {
   .people-page {
-    padding: 16px;
+    padding: 16px 0;
   }
 
   .people-actions-bar {

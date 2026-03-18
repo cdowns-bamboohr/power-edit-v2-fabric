@@ -4,6 +4,7 @@ import {
   IconV2,
   Headline,
   Button,
+  Divider,
   Link,
   Section,
   Tabs,
@@ -84,9 +85,10 @@ export function People({ defaultTab = 'list' }: PeopleProps) {
     <div className="people-page">
       {/* Page Header */}
       <div className="people-header">
-        <Headline size="large" color="primary">People</Headline>
+        <Headline size="large" color="primary" weight="bold">People</Headline>
         <Link href="#" onClick={(e: React.MouseEvent) => e.preventDefault()}>
           <span className="people-header-link">
+            <IconV2 name="square-arrow-up-right-regular" size={16} />
             Quick Access to the Directory
           </span>
         </Link>
@@ -99,7 +101,8 @@ export function People({ defaultTab = 'list' }: PeopleProps) {
             variant="outlined"
             color="primary"
             size="medium"
-            startIcon={<IconV2 name="circle-plus-solid" size={16} />}
+            className="people-primary-btn"
+            startIcon={<IconV2 name="circle-plus-regular" size={16} />}
             onClick={() => navigate('/people/new')}
           >
             New Employee
@@ -108,7 +111,8 @@ export function People({ defaultTab = 'list' }: PeopleProps) {
             variant="outlined"
             color="primary"
             size="medium"
-            startIcon={<IconV2 name="bolt-solid" size={16} />}
+            className="people-primary-btn"
+            startIcon={<IconV2 name="bolt-regular" size={16} />}
             onClick={() => navigate('/people/power-edit')}
           >
             Power Edit
@@ -122,12 +126,13 @@ export function People({ defaultTab = 'list' }: PeopleProps) {
             onChange={(value: unknown, _event: ChangeEvent<Element>) => setViewMode(value as ViewMode)}
             mode="line"
           >
-            <Tab label="List" value="list" icon={<IconV2 name="file-lines-solid" size={16} />} />
-            <Tab label="Directory" value="directory" icon={<IconV2 name="user-group-solid" size={16} />} />
-            <Tab label="Org Chart" value="orgChart" icon={<IconV2 name="sitemap-solid" size={16} />} />
+            <Tab label="List" value="list" icon={<IconV2 name="table-list-regular" size={16} />} />
+            <Tab label="Directory" value="directory" icon={<IconV2 name="address-book-regular" size={16} />} />
+            <Tab label="Org Chart" value="orgChart" icon={<IconV2 name="sitemap-regular" size={16} />} />
           </Tabs>
         </div>
       </div>
+      <Divider className="people-tab-divider" />
 
       {/* List View */}
       {viewMode === 'list' && (

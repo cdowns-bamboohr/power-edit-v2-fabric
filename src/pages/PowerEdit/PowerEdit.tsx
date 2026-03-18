@@ -8,22 +8,28 @@ import {
   TextButton,
   IconButton,
   BodyText,
+  Headline,
   Pill,
   PillType,
   TextField,
   Section,
   ActionFooter,
   StandardModal,
-  SimpleSlidedown,
+  SlidedownPortal,
+  SLIDEDOWN_TYPES,
   DatePicker,
   SelectField,
   Checkbox,
   TextArea,
   Dropdown,
   RoundedToggle,
+  BlankState,
+  IconTile,
 } from '@bamboohr/fabric';
+import { ClipboardIcon } from '../../assets/ClipboardIcon';
 import { employees, type Employee } from '../../data/employees';
 import { sendMessage, type ChatMessage, type PowerEditAction, type TableContext } from './openai';
+import './PowerEdit.css';
 
 const SUGGESTIONS = [
   'Update job titles for everyone in Engineering',
@@ -151,13 +157,13 @@ const fieldsByCategory: Record<string, FieldDef[]> = {
   Personal: [{ name: 'Name', type: 'text' }, { name: 'Employee #', type: 'number' }, { name: 'Status', type: 'list' }, { name: 'First Name', type: 'text' }, { name: 'Middle Name', type: 'text' }, { name: 'Last Name', type: 'text' }, { name: 'Preferred Name', type: 'text' }, { name: 'Birth Date', type: 'date' }, { name: 'Gender', type: 'list' }, { name: 'Gender Identity', type: 'list' }, { name: 'Pronouns', type: 'text' }, { name: 'Ethnicity', type: 'list' }, { name: 'Marital Status', type: 'list' }, { name: 'SSN', type: 'text' }, { name: 'Tax File Number', type: 'text' }],
   Job: [{ name: 'Job Title', type: 'text' }, { name: 'Department', type: 'list' }, { name: 'Location', type: 'list' }, { name: 'Hire Date', type: 'date' }, { name: 'Manager', type: 'text' }, { name: 'Pay Rate', type: 'number' }, { name: 'Employment Status', type: 'list' }, { name: 'Employment Type', type: 'list' }, { name: 'Division', type: 'list' }, { name: 'Cost Center', type: 'text' }],
   'Time Off': [{ name: 'Available Balance', type: 'number' }, { name: 'Used YTD', type: 'number' }, { name: 'Policy', type: 'list' }, { name: 'Next Accrual Date', type: 'date' }],
-  Benefits: [{ name: 'Plan Name', type: 'text' }, { name: 'Coverage Level', type: 'list' }, { name: 'Effective Date', type: 'date' }, { name: 'Annual Cost', type: 'number' }],
-  Training: [{ name: 'Course Name', type: 'text' }, { name: 'Completion Date', type: 'date' }, { name: 'Status', type: 'list' }, { name: 'Score', type: 'number' }],
+  Benefits: [{ name: 'Plan Name', type: 'text' }, { name: 'Coverage Level', type: 'list' }, { name: 'Benefit Effective Date', type: 'date' }, { name: 'Annual Cost', type: 'number' }],
+  Training: [{ name: 'Course Name', type: 'text' }, { name: 'Completion Date', type: 'date' }, { name: 'Training Status', type: 'list' }, { name: 'Score', type: 'number' }],
   Performance: [{ name: 'Review Date', type: 'date' }, { name: 'Rating', type: 'number' }, { name: 'Reviewer', type: 'text' }, { name: 'Goal Status', type: 'list' }],
-  Assets: [{ name: 'Asset Name', type: 'text' }, { name: 'Serial Number', type: 'text' }, { name: 'Assigned Date', type: 'date' }, { name: 'Category', type: 'list' }],
-  Notes: [{ name: 'Note', type: 'text' }, { name: 'Date Added', type: 'date' }, { name: 'Type', type: 'list' }],
+  Assets: [{ name: 'Asset Name', type: 'text' }, { name: 'Serial Number', type: 'text' }, { name: 'Assigned Date', type: 'date' }, { name: 'Asset Category', type: 'list' }],
+  Notes: [{ name: 'Note', type: 'text' }, { name: 'Date Added', type: 'date' }, { name: 'Note Type', type: 'list' }],
   Emergency: [{ name: 'Contact Name', type: 'text' }, { name: 'Relationship', type: 'list' }, { name: 'Phone', type: 'text' }, { name: 'Email', type: 'text' }],
-  Tasks: [{ name: 'Task Name', type: 'text' }, { name: 'Due Date', type: 'date' }, { name: 'Status', type: 'list' }, { name: 'Assignee', type: 'text' }],
+  Tasks: [{ name: 'Task Name', type: 'text' }, { name: 'Due Date', type: 'date' }, { name: 'Task Status', type: 'list' }, { name: 'Assignee', type: 'text' }],
   Calculated: [{ name: 'Tenure (Years)', type: 'number' }, { name: 'Age', type: 'number' }, { name: 'Days Since Hire', type: 'number' }],
 };
 
@@ -280,8 +286,18 @@ function FieldsPanel({ onClose, selectedFields, onSelectedFieldsChange }: { onCl
                   <span style={{ color: 'var(--icon-neutral-weak)', fontSize: 14, flexShrink: 0 }}>⠿</span>
                   {fieldDef && <FieldTypeIcon type={fieldDef.type} />}
                   <BodyText size="extra-small" color="neutral-strong">
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', maxWidth: 140 }}>{name}</span>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', maxWidth: 110 }}>{name}</span>
                   </BodyText>
+                  <span style={{ marginLeft: 'auto', flexShrink: 0 }}>
+                    <IconButton
+                      icon="circle-xmark-regular"
+                      aria-label={`Remove ${name}`}
+                      noBoundingBox
+                      color="secondary"
+                      size="small"
+                      onMouseDown={(e: React.MouseEvent) => { e.stopPropagation(); e.preventDefault(); onSelectedFieldsChange(selectedFields.filter((f) => f !== name)); }}
+                    />
+                  </span>
                 </div>
               );
             })}
@@ -313,6 +329,8 @@ function FiltersPanel({ onClose, initialFilterField, filters, onFiltersChange, m
   onFiltersChange: (f: FilterRecord[]) => void; matchAll: boolean; onMatchAllChange: (v: boolean) => void;
   nextIdRef: React.MutableRefObject<number>;
 }) {
+  const [matchDropdownOpen, setMatchDropdownOpen] = useState(false);
+
   useEffect(() => {
     if (initialFilterField) {
       const isDate = DATE_FILTER_FIELDS.has(initialFilterField);
@@ -320,41 +338,59 @@ function FiltersPanel({ onClose, initialFilterField, filters, onFiltersChange, m
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
   const panelRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    function h(e: MouseEvent) { if (panelRef.current && !panelRef.current.contains(e.target as Node)) onClose(); }
+    function h(e: MouseEvent) {
+      // Don't close while a Fabric SelectField portal (listbox) is open — user is picking a value
+      if (document.querySelector('[role="listbox"]')) return;
+      if (panelRef.current && !panelRef.current.contains(e.target as Node)) onClose();
+    }
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, [onClose]);
 
   function updateFilter(id: number, patch: Partial<FilterRecord>) { onFiltersChange(filters.map((f) => (f.id === id ? { ...f, ...patch } : f))); }
   function removeFilter(id: number) { onFiltersChange(filters.filter((f) => f.id !== id)); }
-  function addFilter() { onFiltersChange([...filters, { id: nextIdRef.current++, field: 'Department', operator: 'includes', value: '', dateTo: '' }]); }
+  function addFilter() { onFiltersChange([...filters, { id: nextIdRef.current++, field: 'Department', operator: 'is', value: '', dateTo: '' }]); }
 
   const fieldItems = FILTER_FIELD_OPTIONS.map((f) => ({ text: f, value: f }));
 
   return (
-    <div ref={panelRef} style={{ position: 'absolute', top: '100%', left: 0, marginTop: 8, zIndex: 50, background: 'var(--surface-neutral-white)', borderRadius: 16, padding: 20, display: 'flex', flexDirection: 'column', gap: 16, minWidth: 580, boxShadow: '3px 3px 10px 2px rgba(56,49,47,0.10), 1px 1px 0px 1px rgba(56,49,47,0.04)' }}>
+    <div ref={panelRef} style={{ position: 'absolute', top: '100%', left: 0, marginTop: 8, zIndex: 50, background: 'var(--surface-neutral-white)', borderRadius: 16, padding: 20, display: 'flex', flexDirection: 'column', gap: 12, minWidth: 580, boxShadow: '3px 3px 10px 2px rgba(56,49,47,0.10), 1px 1px 0px 1px rgba(56,49,47,0.04)' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <BodyText size="large" weight="semibold" color="primary">Filters</BodyText>
         <IconButton icon="xmark-solid" aria-label="Close" variant="outlined" color="secondary" size="small" onClick={onClose} />
       </div>
 
-      {/* Records matching All/Any */}
+      {/* Records matching All/Any — TextButton with caret + inline popover */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
         <BodyText size="extra-small" color="neutral-medium">Records matching</BodyText>
-        <Dropdown
-          type="text"
-          showCaret={false}
-          items={[
-            { text: 'All', value: 'all' },
-            { text: 'Any', value: 'any' },
-          ]}
-          onSelect={(value) => onMatchAllChange(value === 'all')}
-        >
-          {matchAll ? 'All' : 'Any'}
-        </Dropdown>
+        <div style={{ position: 'relative', display: 'inline-block' }}>
+          <TextButton onClick={() => setMatchDropdownOpen((v) => !v)}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <IconV2 name="caret-down-solid" size={10} />
+              {matchAll ? 'All' : 'Any'}
+            </span>
+          </TextButton>
+          {matchDropdownOpen && (
+            <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 60, background: 'var(--surface-neutral-white)', borderRadius: 8, border: '1px solid var(--border-neutral-weak)', boxShadow: '0 2px 8px rgba(56,49,47,0.12)', overflow: 'hidden', minWidth: 80 }}>
+              {(['Any', 'All'] as const).map((opt) => (
+                <button
+                  key={opt}
+                  onClick={() => { onMatchAllChange(opt === 'All'); setMatchDropdownOpen(false); }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--surface-neutral-xx-weak)'; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = (opt === 'All') === matchAll ? 'var(--surface-neutral-x-weak)' : 'transparent'; }}
+                  style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', border: 'none', cursor: 'pointer', background: (opt === 'All') === matchAll ? 'var(--surface-neutral-x-weak)' : 'transparent', fontFamily: 'Inter, system-ui, sans-serif', fontSize: 14, color: 'var(--text-neutral-strong)' }}
+                >
+                  {opt}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <BodyText size="extra-small" color="neutral-medium">of the following</BodyText>
       </div>
 
       {/* Filter rows */}
@@ -370,29 +406,31 @@ function FiltersPanel({ onClose, initialFilterField, filters, onFiltersChange, m
               <div style={{ flexShrink: 0, width: 148 }}>
                 <SelectField
                   ariaLabel="Filter field"
+                  size="small"
                   items={fieldItems}
                   value={filter.field}
                   isClearable={false}
-                  onChange={(e) => {
-                    const newField = e.target.value as string;
+                  onSelect={(v) => {
+                    const newField = v as string;
                     updateFilter(filter.id, { field: newField, operator: FILTER_OPERATORS[DATE_FILTER_FIELDS.has(newField) ? 'date' : 'default'][0], value: '', dateTo: '' });
                   }}
                 />
               </div>
               {/* Operator selector */}
-              <div style={{ flexShrink: 0, width: 128 }}>
+              <div style={{ flexShrink: 0, width: 120 }}>
                 <SelectField
                   ariaLabel="Filter operator"
+                  size="small"
                   items={operatorItems}
                   value={filter.operator}
                   isClearable={false}
-                  onChange={(e) => updateFilter(filter.id, { operator: e.target.value as string })}
+                  onSelect={(v) => updateFilter(filter.id, { operator: v as string })}
                 />
               </div>
               {/* Value */}
               {isDate ? (
                 <>
-                  <div style={{ flexShrink: 0, width: 148 }}>
+                  <div style={{ flexShrink: 0, width: 140 }}>
                     <DatePicker
                       value={filter.value || undefined}
                       onChange={({ value }) => updateFilter(filter.id, { value: value ?? '' })}
@@ -401,7 +439,7 @@ function FiltersPanel({ onClose, initialFilterField, filters, onFiltersChange, m
                     />
                   </div>
                   <BodyText size="small" color="neutral-medium">–</BodyText>
-                  <div style={{ flexShrink: 0, width: 148 }}>
+                  <div style={{ flexShrink: 0, width: 140 }}>
                     <DatePicker
                       value={filter.dateTo || undefined}
                       onChange={({ value }) => updateFilter(filter.id, { dateTo: value ?? '' })}
@@ -411,19 +449,20 @@ function FiltersPanel({ onClose, initialFilterField, filters, onFiltersChange, m
                   </div>
                 </>
               ) : (
-                <div style={{ flexShrink: 0, width: 148 }}>
+                <div style={{ flexShrink: 0, width: 160 }}>
                   <SelectField
                     ariaLabel="Filter value"
+                    size="small"
                     items={valueItems}
                     value={filter.value || ''}
                     isClearable={false}
-                    onChange={(e) => updateFilter(filter.id, { value: e.target.value as string })}
+                    onSelect={(v) => updateFilter(filter.id, { value: v as string })}
                   />
                 </div>
               )}
               {/* Remove */}
               <IconButton
-                icon="trash-can-solid"
+                icon="trash-can-regular"
                 aria-label="Remove filter"
                 variant="outlined"
                 color="secondary"
@@ -448,47 +487,145 @@ function FiltersPanel({ onClose, initialFilterField, filters, onFiltersChange, m
   );
 }
 
-// ─── Mock Data & Helpers ──────────────────────────────────────────────────────
-const mockSalaries: Record<number, number> = { 100: 320000, 5: 210000, 6: 195000, 7: 185000, 8: 175000, 9: 168000, 10: 143098, 11: 164857, 12: 112677, 13: 510195, 14: 432903, 15: 231754, 16: 210026, 17: 164857, 18: 163098, 19: 133098, 20: 145000, 21: 128000, 22: 118000, 23: 155000, 24: 142000, 25: 138000, 26: 125000, 27: 132000, 28: 148000, 29: 112000, 30: 139000 };
-function getSalary(id: number): number { return mockSalaries[id] ?? 95000 + ((id * 13371) % 80000); }
+// ─── Helpers & Derived Data ───────────────────────────────────────────────────
 function formatSalary(amount: number): string { return `$ ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; }
-const MOCK_GENDERS = ['Male', 'Female', 'Non-binary', 'Female', 'Male', 'Female', 'Male', 'Non-binary', 'Male', 'Female'];
-const MOCK_ETHNICITIES = ['White', 'Asian', 'Hispanic or Latino', 'Black or African American', 'White', 'Asian', 'Two or More Races', 'White', 'Hispanic or Latino', 'Black or African American'];
-const MOCK_EMP_TYPES = ['Full-Time', 'Full-Time', 'Full-Time', 'Full-Time', 'Full-Time', 'Full-Time', 'Full-Time', 'Part-Time', 'Part-Time', 'Contract'];
-function getMockBirthDate(id: number): string { const year = 1965 + ((id * 7) % 33); const month = String(1 + ((id * 3) % 12)).padStart(2, '0'); const day = String(1 + ((id * 11) % 28)).padStart(2, '0'); return `${month}/${day}/${year}`; }
-function getMockGender(id: number): string { return MOCK_GENDERS[id % MOCK_GENDERS.length]; }
-function getMockEthnicity(id: number): string { return MOCK_ETHNICITIES[id % MOCK_ETHNICITIES.length]; }
-function getMockEmploymentType(employee: Employee): string { if (employee.employmentType) return employee.employmentType; return MOCK_EMP_TYPES[employee.id % MOCK_EMP_TYPES.length]; }
 function getReportsToName(reportsToId: number | null): string { if (reportsToId === null) return '—'; const manager = employees.find((e) => e.id === reportsToId); return manager?.name ?? '—'; }
 const allEmployeeNames = employees.filter((e) => !e.isTBH).map((e) => e.name);
 const allJobTitles = [...new Set(employees.filter((e) => !e.isTBH).map((e) => e.title))].sort();
 const allDepartments = [...new Set(employees.filter((e) => !e.isTBH).map((e) => e.department))].sort();
 const allLocations = [...new Set(employees.filter((e) => !e.isTBH).map((e) => e.location))].sort();
 const allDivisions = [...new Set(employees.filter((e) => !e.isTBH).map((e) => e.division))].sort();
-const FILTER_FIELD_VALUES: Record<string, string[]> = { 'Department': allDepartments, 'Location': allLocations, 'Division': allDivisions, 'Employment Type': ['Full-Time', 'Part-Time', 'Contract'], 'Employment Status': ['Active', 'Inactive', 'On Leave'], 'Job Title': allJobTitles, 'Gender': ['Male', 'Female', 'Non-binary', 'Prefer not to say'], 'Ethnicity': ['White', 'Asian', 'Hispanic or Latino', 'Black or African American', 'Two or More Races', 'Prefer not to say'] };
-const DATE_COL_KEYS = new Set<ColKey>(['hireDate', 'effectiveDate', 'birthDate']);
+const allGenders     = [...new Set(employees.filter((e) => !e.isTBH).map((e) => e.gender))].sort();
+const allEthnicities = [...new Set(employees.filter((e) => !e.isTBH).map((e) => e.ethnicity))].sort();
+const allEmpTypes    = [...new Set(employees.filter((e) => !e.isTBH).map((e) => e.employmentType))].sort();
+const allEmpStatuses = [...new Set(employees.filter((e) => !e.isTBH).map((e) => e.employmentStatus))].sort();
+const FILTER_FIELD_VALUES: Record<string, string[]> = {
+  'Department': allDepartments,
+  'Location': allLocations,
+  'Division': allDivisions,
+  'Employment Type': allEmpTypes,
+  'Employment Status': allEmpStatuses,
+  'Job Title': allJobTitles,
+  'Gender': allGenders,
+  'Ethnicity': allEthnicities,
+};
+
+type ColKey =
+  | 'name' | 'firstName' | 'lastName' | 'title' | 'department' | 'location' | 'division'
+  | 'reportsTo' | 'hireDate' | 'salary' | 'employmentType' | 'employmentStatus'
+  | 'employeeNumber' | 'birthDate' | 'gender' | 'ethnicity' | 'effectiveDate'
+  | 'middleName' | 'preferredName' | 'pronouns' | 'genderIdentity' | 'maritalStatus' | 'ssn' | 'taxFileNumber'
+  | 'costCenter'
+  | 'timeOffBalance' | 'timeOffUsedYTD' | 'timeOffPolicy' | 'timeOffNextAccrual'
+  | 'benefitPlanName' | 'benefitCoverageLevel' | 'benefitEffectiveDate' | 'benefitAnnualCost'
+  | 'trainingCourseName' | 'trainingCompletionDate' | 'trainingStatus' | 'trainingScore'
+  | 'performanceReviewDate' | 'performanceRating' | 'performanceReviewer' | 'performanceGoalStatus'
+  | 'assetName' | 'assetSerialNumber' | 'assetAssignedDate' | 'assetCategory'
+  | 'noteContent' | 'noteDateAdded' | 'noteType'
+  | 'emergencyContactName' | 'emergencyContactRelationship' | 'emergencyContactPhone' | 'emergencyContactEmail'
+  | 'taskName' | 'taskDueDate' | 'taskStatus' | 'taskAssignee'
+  | 'tenureYears' | 'age' | 'daysSinceHire';
+
+const DATE_COL_KEYS = new Set<ColKey>([
+  'hireDate', 'effectiveDate', 'birthDate',
+  'timeOffNextAccrual', 'benefitEffectiveDate', 'trainingCompletionDate',
+  'performanceReviewDate', 'assetAssignedDate', 'noteDateAdded', 'taskDueDate',
+]);
+
 const COL_OPTIONS: Partial<Record<ColKey, string[]>> = {
   title: allJobTitles,
   reportsTo: allEmployeeNames,
   department: allDepartments,
   location: allLocations,
   division: allDivisions,
-  employmentType: ['Full-Time', 'Part-Time', 'Contract'],
-  employmentStatus: ['Active', 'Inactive', 'On Leave'],
-  gender: ['Male', 'Female', 'Non-binary', 'Prefer not to say'],
-  ethnicity: ['White', 'Asian', 'Hispanic or Latino', 'Black or African American', 'Two or More Races', 'Prefer not to say'],
+  employmentType: allEmpTypes,
+  employmentStatus: allEmpStatuses,
+  gender: allGenders,
+  ethnicity: allEthnicities,
+  timeOffPolicy:                ['PTO Standard', 'Unlimited PTO', 'Accrual - 15 days', 'Accrual - 10 days'],
+  benefitCoverageLevel:         ['Employee Only', 'Employee + Spouse', 'Employee + Children', 'Family'],
+  trainingStatus:               ['Completed', 'In Progress', 'Not Started'],
+  performanceGoalStatus:        ['On Track', 'Behind', 'Achieved', 'Not Set'],
+  assetCategory:                ['Computer', 'Phone', 'Monitor', 'Peripheral', 'Other'],
+  noteType:                     ['General', 'Performance', 'HR', 'Compliance'],
+  emergencyContactRelationship: ['Spouse', 'Parent', 'Sibling', 'Partner', 'Other'],
+  taskStatus:                   ['Pending', 'Complete', 'Overdue'],
+  maritalStatus:                ['Single', 'Married', 'Domestic Partnership', 'Divorced', 'Widowed'],
+  genderIdentity:               ['Man', 'Woman', 'Non-binary', 'Genderfluid', 'Prefer not to say'],
 };
-
-type ColKey = 'name' | 'firstName' | 'lastName' | 'title' | 'department' | 'location' | 'division' | 'reportsTo' | 'hireDate' | 'salary' | 'employmentType' | 'employmentStatus' | 'employeeNumber' | 'birthDate' | 'gender' | 'ethnicity' | 'effectiveDate';
 
 const COL_TO_FILTER_FIELD: Partial<Record<ColKey, string>> = { title: 'Job Title', hireDate: 'Hire Date', department: 'Department', location: 'Location', division: 'Division', employmentType: 'Employment Type' };
 const FIELD_TO_COL: Partial<Record<string, { key: ColKey; label: string; align?: 'right' }>> = {
-  'Name': { key: 'name', label: 'Name' }, 'Employee #': { key: 'employeeNumber', label: 'Employee #' }, 'Status': { key: 'employmentStatus', label: 'Status' },
-  'First Name': { key: 'firstName', label: 'First Name' }, 'Middle Name': { key: 'firstName', label: 'First Name' }, 'Last Name': { key: 'lastName', label: 'Last Name' },
-  'Preferred Name': { key: 'firstName', label: 'First Name' }, 'Birth Date': { key: 'birthDate', label: 'Birth Date' }, 'Gender': { key: 'gender', label: 'Gender' }, 'Ethnicity': { key: 'ethnicity', label: 'Ethnicity' },
-  'Job Title': { key: 'title', label: 'Job Title' }, 'Department': { key: 'department', label: 'Department' }, 'Location': { key: 'location', label: 'Location' }, 'Hire Date': { key: 'hireDate', label: 'Hire Date' },
-  'Manager': { key: 'reportsTo', label: 'Reports To' }, 'Pay Rate': { key: 'salary', label: 'Pay Rate', align: 'right' }, 'Employment Status': { key: 'employmentStatus', label: 'Status' },
-  'Employment Type': { key: 'employmentType', label: 'Employment Type' }, 'Division': { key: 'division', label: 'Division' },
+  // Personal
+  'Name': { key: 'name', label: 'Name' },
+  'Employee #': { key: 'employeeNumber', label: 'Employee #' },
+  'Status': { key: 'employmentStatus', label: 'Status' },
+  'First Name': { key: 'firstName', label: 'First Name' },
+  'Middle Name': { key: 'middleName', label: 'Middle Name' },
+  'Last Name': { key: 'lastName', label: 'Last Name' },
+  'Preferred Name': { key: 'preferredName', label: 'Preferred Name' },
+  'Birth Date': { key: 'birthDate', label: 'Birth Date' },
+  'Gender': { key: 'gender', label: 'Gender' },
+  'Gender Identity': { key: 'genderIdentity', label: 'Gender Identity' },
+  'Pronouns': { key: 'pronouns', label: 'Pronouns' },
+  'Ethnicity': { key: 'ethnicity', label: 'Ethnicity' },
+  'Marital Status': { key: 'maritalStatus', label: 'Marital Status' },
+  'SSN': { key: 'ssn', label: 'SSN' },
+  'Tax File Number': { key: 'taxFileNumber', label: 'Tax File Number' },
+  // Job
+  'Job Title': { key: 'title', label: 'Job Title' },
+  'Department': { key: 'department', label: 'Department' },
+  'Location': { key: 'location', label: 'Location' },
+  'Hire Date': { key: 'hireDate', label: 'Hire Date' },
+  'Manager': { key: 'reportsTo', label: 'Reports To' },
+  'Pay Rate': { key: 'salary', label: 'Pay Rate', align: 'right' },
+  'Employment Status': { key: 'employmentStatus', label: 'Status' },
+  'Employment Type': { key: 'employmentType', label: 'Employment Type' },
+  'Division': { key: 'division', label: 'Division' },
+  'Cost Center': { key: 'costCenter', label: 'Cost Center' },
+  // Time Off
+  'Available Balance': { key: 'timeOffBalance', label: 'Available Balance', align: 'right' },
+  'Used YTD': { key: 'timeOffUsedYTD', label: 'Used YTD', align: 'right' },
+  'Policy': { key: 'timeOffPolicy', label: 'Policy' },
+  'Next Accrual Date': { key: 'timeOffNextAccrual', label: 'Next Accrual' },
+  // Benefits
+  'Plan Name': { key: 'benefitPlanName', label: 'Plan Name' },
+  'Coverage Level': { key: 'benefitCoverageLevel', label: 'Coverage Level' },
+  'Benefit Effective Date': { key: 'benefitEffectiveDate', label: 'Benefit Effective Date' },
+  'Annual Cost': { key: 'benefitAnnualCost', label: 'Annual Cost', align: 'right' },
+  // Training
+  'Course Name': { key: 'trainingCourseName', label: 'Course Name' },
+  'Completion Date': { key: 'trainingCompletionDate', label: 'Completion Date' },
+  'Training Status': { key: 'trainingStatus', label: 'Training Status' },
+  'Score': { key: 'trainingScore', label: 'Score', align: 'right' },
+  // Performance
+  'Review Date': { key: 'performanceReviewDate', label: 'Review Date' },
+  'Rating': { key: 'performanceRating', label: 'Rating', align: 'right' },
+  'Reviewer': { key: 'performanceReviewer', label: 'Reviewer' },
+  'Goal Status': { key: 'performanceGoalStatus', label: 'Goal Status' },
+  // Assets
+  'Asset Name': { key: 'assetName', label: 'Asset Name' },
+  'Serial Number': { key: 'assetSerialNumber', label: 'Serial Number' },
+  'Assigned Date': { key: 'assetAssignedDate', label: 'Assigned Date' },
+  'Asset Category': { key: 'assetCategory', label: 'Asset Category' },
+  // Notes
+  'Note': { key: 'noteContent', label: 'Note' },
+  'Date Added': { key: 'noteDateAdded', label: 'Date Added' },
+  'Note Type': { key: 'noteType', label: 'Note Type' },
+  // Emergency
+  'Contact Name': { key: 'emergencyContactName', label: 'Emergency Contact' },
+  'Relationship': { key: 'emergencyContactRelationship', label: 'Relationship' },
+  'Phone': { key: 'emergencyContactPhone', label: 'Emergency Phone' },
+  'Email': { key: 'emergencyContactEmail', label: 'Emergency Email' },
+  // Tasks
+  'Task Name': { key: 'taskName', label: 'Task Name' },
+  'Due Date': { key: 'taskDueDate', label: 'Due Date' },
+  'Task Status': { key: 'taskStatus', label: 'Task Status' },
+  'Assignee': { key: 'taskAssignee', label: 'Assignee' },
+  // Calculated
+  'Tenure (Years)': { key: 'tenureYears', label: 'Tenure (Yrs)', align: 'right' },
+  'Age': { key: 'age', label: 'Age', align: 'right' },
+  'Days Since Hire': { key: 'daysSinceHire', label: 'Days Since Hire', align: 'right' },
 };
 const DEFAULT_SELECTED_FIELDS: string[] = [];
 const DEFAULT_ALL_COLUMNS: { key: ColKey; label: string; align?: 'right' }[] = [{ key: 'name', label: 'Name' }, { key: 'title', label: 'Job Title' }, { key: 'reportsTo', label: 'Reports To' }, { key: 'hireDate', label: 'Hire Date' }, { key: 'salary', label: 'Pay Rate', align: 'right' }];
@@ -517,22 +654,89 @@ function formatEffectiveDateLabel(dateStr: string): string { const today = new D
 function getOriginalValue(employee: Employee, col: ColKey, effectiveDateStr?: string): string {
   switch (col) {
     case 'name': return employee.name;
-    case 'firstName': return employee.firstName ?? employee.name.split(' ')[0];
-    case 'lastName': return employee.lastName ?? employee.name.split(' ').slice(-1)[0];
+    case 'firstName': return employee.firstName;
+    case 'lastName': return employee.lastName;
     case 'title': return employee.title;
     case 'department': return employee.department;
     case 'location': return employee.location;
     case 'division': return employee.division;
     case 'reportsTo': return getReportsToName(employee.reportsTo);
-    case 'hireDate': return employee.hireDate ?? '—';
-    case 'salary': return formatSalary(getSalary(employee.id));
-    case 'employmentStatus': return employee.employmentStatus ?? 'Full-Time';
-    case 'employmentType': return getMockEmploymentType(employee);
-    case 'employeeNumber': return employee.employeeNumber ?? String(employee.id);
-    case 'birthDate': return employee.birthDate ?? getMockBirthDate(employee.id);
-    case 'gender': return employee.gender ?? getMockGender(employee.id);
-    case 'ethnicity': return employee.ethnicity ?? getMockEthnicity(employee.id);
+    case 'hireDate': return employee.hireDate;
+    case 'salary': return formatSalary(employee.salary);
+    case 'employmentStatus': return employee.employmentStatus;
+    case 'employmentType': return employee.employmentType;
+    case 'employeeNumber': return employee.employeeNumber;
+    case 'birthDate': return employee.birthDate;
+    case 'gender': return employee.gender;
+    case 'ethnicity': return employee.ethnicity;
     case 'effectiveDate': return formatDateDisplay(effectiveDateStr ?? new Date().toISOString().split('T')[0]);
+    // Personal new
+    case 'middleName': return employee.middleName ?? '—';
+    case 'preferredName': return employee.preferredName ?? '—';
+    case 'pronouns': return employee.pronouns ?? '—';
+    case 'genderIdentity': return employee.genderIdentity ?? '—';
+    case 'maritalStatus': return employee.maritalStatus ?? '—';
+    case 'ssn': return employee.ssn ?? '—';
+    case 'taxFileNumber': return employee.taxFileNumber ?? '—';
+    // Job new
+    case 'costCenter': return employee.costCenter ?? '—';
+    // Time Off
+    case 'timeOffBalance': return employee.timeOffBalance !== undefined ? String(employee.timeOffBalance) : '—';
+    case 'timeOffUsedYTD': return employee.timeOffUsedYTD !== undefined ? String(employee.timeOffUsedYTD) : '—';
+    case 'timeOffPolicy': return employee.timeOffPolicy ?? '—';
+    case 'timeOffNextAccrual': return employee.timeOffNextAccrual ?? '—';
+    // Benefits
+    case 'benefitPlanName': return employee.benefitPlanName ?? '—';
+    case 'benefitCoverageLevel': return employee.benefitCoverageLevel ?? '—';
+    case 'benefitEffectiveDate': return employee.benefitEffectiveDate ?? '—';
+    case 'benefitAnnualCost': return employee.benefitAnnualCost !== undefined ? formatSalary(employee.benefitAnnualCost) : '—';
+    // Training
+    case 'trainingCourseName': return employee.trainingCourseName ?? '—';
+    case 'trainingCompletionDate': return employee.trainingCompletionDate ?? '—';
+    case 'trainingStatus': return employee.trainingStatus ?? '—';
+    case 'trainingScore': return employee.trainingScore !== undefined ? String(employee.trainingScore) : '—';
+    // Performance
+    case 'performanceReviewDate': return employee.performanceReviewDate ?? '—';
+    case 'performanceRating': return employee.performanceRating !== undefined ? String(employee.performanceRating) : '—';
+    case 'performanceReviewer': return employee.performanceReviewer ?? '—';
+    case 'performanceGoalStatus': return employee.performanceGoalStatus ?? '—';
+    // Assets
+    case 'assetName': return employee.assetName ?? '—';
+    case 'assetSerialNumber': return employee.assetSerialNumber ?? '—';
+    case 'assetAssignedDate': return employee.assetAssignedDate ?? '—';
+    case 'assetCategory': return employee.assetCategory ?? '—';
+    // Notes
+    case 'noteContent': return employee.noteContent ?? '—';
+    case 'noteDateAdded': return employee.noteDateAdded ?? '—';
+    case 'noteType': return employee.noteType ?? '—';
+    // Emergency
+    case 'emergencyContactName': return employee.emergencyContactName ?? '—';
+    case 'emergencyContactRelationship': return employee.emergencyContactRelationship ?? '—';
+    case 'emergencyContactPhone': return employee.emergencyContactPhone ?? '—';
+    case 'emergencyContactEmail': return employee.emergencyContactEmail ?? '—';
+    // Tasks
+    case 'taskName': return employee.taskName ?? '—';
+    case 'taskDueDate': return employee.taskDueDate ?? '—';
+    case 'taskStatus': return employee.taskStatus ?? '—';
+    case 'taskAssignee': return employee.taskAssignee ?? '—';
+    // Calculated
+    case 'tenureYears': {
+      const hire = parseMDYToISO(employee.hireDate);
+      if (!hire) return '—';
+      const years = (Date.now() - new Date(hire).getTime()) / (1000 * 60 * 60 * 24 * 365.25);
+      return years.toFixed(1);
+    }
+    case 'age': {
+      const bd = parseMDYToISO(employee.birthDate);
+      if (!bd) return '—';
+      const years = Math.floor((Date.now() - new Date(bd).getTime()) / (1000 * 60 * 60 * 24 * 365.25));
+      return String(years);
+    }
+    case 'daysSinceHire': {
+      const hire = parseMDYToISO(employee.hireDate);
+      if (!hire) return '—';
+      return String(Math.floor((Date.now() - new Date(hire).getTime()) / (1000 * 60 * 60 * 24)));
+    }
   }
 }
 
@@ -578,14 +782,8 @@ function CellSelect({ colLabel, value, items, onSelect, onClear, onClose }: {
 
 // ─── Effective Date Panel ─────────────────────────────────────────────────────
 function EffectiveDatePanel({ effectiveDate, onDateChange, useIndividualDates, onToggleIndividualDates, onClose }: { effectiveDate: string; onDateChange: (date: string) => void; useIndividualDates: boolean; onToggleIndividualDates: () => void; onClose: () => void }) {
-  const panelRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    function h(e: MouseEvent) { if (panelRef.current && !panelRef.current.contains(e.target as Node)) onClose(); }
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, [onClose]);
   return (
-    <div ref={panelRef} style={{ position: 'absolute', top: '100%', left: 0, marginTop: 8, zIndex: 50, background: 'var(--surface-neutral-white)', borderRadius: 'var(--radius-small)', padding: 20, display: 'flex', flexDirection: 'column', gap: 16, width: 300, boxShadow: '3px 3px 10px 2px rgba(56,49,47,0.10), 1px 1px 0px 1px rgba(56,49,47,0.04)' }}>
+    <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 8, zIndex: 50, background: 'var(--surface-neutral-white)', borderRadius: 'var(--radius-small)', padding: 20, display: 'flex', flexDirection: 'column', gap: 16, width: 300, boxShadow: '3px 3px 10px 2px rgba(56,49,47,0.10), 1px 1px 0px 1px rgba(56,49,47,0.04)' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <BodyText size="large" weight="semibold" color="primary">Effective Date</BodyText>
         <IconButton icon="xmark-solid" aria-label="Close" variant="outlined" color="secondary" size="small" onClick={onClose} />
@@ -715,20 +913,79 @@ function BulkEditPanel({ col, rowCount, onApply, onClose }: { col: { key: ColKey
   );
 }
 
+// ─── Filter Property Map ───────────────────────────────────────────────────────
+const FILTER_FIELD_TO_PROP: Record<string, (e: Employee) => string> = {
+  'Department': (e) => e.department,
+  'Location': (e) => e.location,
+  'Division': (e) => e.division,
+  'Employment Type': (e) => e.employmentType,
+  'Employment Status': (e) => e.employmentStatus,
+  'Job Title': (e) => e.title,
+  'Gender': (e) => e.gender,
+  'Ethnicity': (e) => e.ethnicity,
+  'Hire Date': (e) => parseMDYToISO(e.hireDate),
+  'Birth Date': (e) => parseMDYToISO(e.birthDate),
+};
+
+function applyFilters(emps: Employee[], filters: FilterRecord[], matchAll: boolean): Employee[] {
+  const configured = filters.filter((f) => f.value || f.dateTo);
+  if (configured.length === 0) return emps;
+  return emps.filter((emp) => {
+    const results = configured.map((filter) => {
+      const getProp = FILTER_FIELD_TO_PROP[filter.field];
+      if (!getProp) return true;
+      const empVal = getProp(emp).toLowerCase();
+      const filterVal = filter.value.toLowerCase();
+      switch (filter.operator) {
+        case 'includes': return empVal.includes(filterVal);
+        case 'excludes': return !empVal.includes(filterVal);
+        case 'is': return empVal === filterVal;
+        case 'is not': return empVal !== filterVal;
+        case 'is before': return filter.value ? empVal < filter.value : true;
+        case 'is after': return filter.value ? empVal > filter.value : true;
+        case 'is on': return empVal === filter.value;
+        case 'is during': {
+          const from = filter.value;
+          const to = filter.dateTo;
+          if (from && to) return empVal >= from && empVal <= to;
+          if (from) return empVal >= from;
+          if (to) return empVal <= to;
+          return true;
+        }
+        default: return true;
+      }
+    });
+    return matchAll ? results.every(Boolean) : results.some(Boolean);
+  });
+}
+
 // ─── Main PowerEdit Component ─────────────────────────────────────────────────
 export function PowerEdit() {
   const navigate = useNavigate();
   const location = useLocation();
   const selectedIds: number[] = location.state?.selectedIds ?? [];
   const hasSelection = selectedIds.length > 0;
-  const displayEmployees = hasSelection ? employees.filter((e) => !e.isTBH && selectedIds.includes(e.id)) : [];
+  const baseEmployees = hasSelection
+    ? employees.filter((e) => !e.isTBH && selectedIds.includes(e.id))
+    : employees.filter((e) => !e.isTBH);
   const sessionName: string = location.state?.sessionName ?? '';
   const isReadonly: boolean = location.state?.readonly ?? false;
   const baseColumns = sessionName ? DEFAULT_ALL_COLUMNS : NEW_EDIT_COLUMNS;
   const [editTitle, setEditTitle] = useState(sessionName);
   const [titleEditing, setTitleEditing] = useState(!sessionName && !isReadonly);
   const [titleError, setTitleError] = useState(false);
-  const [slidedown, setSlidedown] = useState<{ message: string; type: 'success' | 'error' | 'information' } | null>(null);
+  const [slidedownContent, setSlidedownContent] = useState<{ message: string; type: SLIDEDOWN_TYPES } | null>(null);
+  const [slidedownVisible, setSlidedownVisible] = useState(false);
+  function showSlidedown(message: string, type: SLIDEDOWN_TYPES) {
+    setSlidedownContent({ message, type });
+    setSlidedownVisible(true);
+    setTimeout(() => setSlidedownVisible(false), 5000);
+    setTimeout(() => setSlidedownContent(null), 5500);
+  }
+  function dismissSlidedown() {
+    setSlidedownVisible(false);
+    setTimeout(() => setSlidedownContent(null), 500);
+  }
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [describeItOpen, setDescribeItOpen] = useState(false);
   const [describeItClosing, setDescribeItClosing] = useState(false);
@@ -737,9 +994,13 @@ export function PowerEdit() {
     setTimeout(() => { setDescribeItOpen(false); setDescribeItClosing(false); }, 280);
   }
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [filters, setFilters] = useState<FilterRecord[]>([]);
+  const [filters, setFilters] = useState<FilterRecord[]>([
+    { id: 1, field: 'Department', operator: 'is', value: '', dateTo: '' },
+    { id: 2, field: 'Employment Type', operator: 'is', value: '', dateTo: '' },
+    { id: 3, field: 'Employment Status', operator: 'is', value: '', dateTo: '' },
+  ]);
   const [filterMatchAll, setFilterMatchAll] = useState(true);
-  const filterNextId = useRef(1);
+  const filterNextId = useRef(4);
   const [fieldsOpen, setFieldsOpen] = useState(false);
   const [selectedEmployeeType, setSelectedEmployeeType] = useState<string>(location.state?.datasetType ?? 'Employees');
   const [selectedFields, setSelectedFields] = useState<string[]>(sessionName ? ['Name', 'Job Title', 'Manager', 'Hire Date', 'Pay Rate'] : DEFAULT_SELECTED_FIELDS);
@@ -769,24 +1030,26 @@ export function PowerEdit() {
   useEffect(() => { if (!hasSelection) { const t = setTimeout(() => setDescribeItOpen(true), 1000); return () => clearTimeout(t); } }, []);
   useEffect(() => { return () => { localStorage.removeItem('bhr-describe-it-open'); }; }, []);
 
+  const displayEmployees = applyFilters(baseEmployees, filters, filterMatchAll);
+
   function startEditing(id: number, col: ColKey, currentValue: string) { setEditingCell({ id, col }); setEditingValue(currentValue); }
   function commitEdit(overrideValue?: string) {
     if (!editingCell) return;
     const { id, col } = editingCell;
     const key = `${id}-${col}`;
-    const employee = displayEmployees.find((e) => e.id === id)!;
+    const employee = baseEmployees.find((e) => e.id === id)!;
     const original = getOriginalValue(employee, col, effectiveDate);
     const newValue = (overrideValue ?? editingValue).trim();
     if (newValue && newValue !== original) setEdits((prev) => ({ ...prev, [key]: { original, current: newValue } }));
     setEditingCell(null);
   }
-  function getCellDisplayValue(employee: (typeof displayEmployees)[0], col: ColKey): string { const key = `${employee.id}-${col}`; return edits[key]?.current ?? getOriginalValue(employee, col, effectiveDate); }
+  function getCellDisplayValue(employee: (typeof baseEmployees)[0], col: ColKey): string { const key = `${employee.id}-${col}`; return edits[key]?.current ?? getOriginalValue(employee, col, effectiveDate); }
   function applyBulkEdit(col: ColKey, value: string) {
-    setEdits((prev) => { const next = { ...prev }; for (const emp of displayEmployees) { const key = `${emp.id}-${col}`; const original = prev[key]?.original ?? getOriginalValue(emp, col, effectiveDate); next[key] = { original, current: value }; } return next; });
+    setEdits((prev) => { const next = { ...prev }; for (const emp of baseEmployees) { const key = `${emp.id}-${col}`; const original = prev[key]?.original ?? getOriginalValue(emp, col, effectiveDate); next[key] = { original, current: value }; } return next; });
     setBulkEditCol(null);
   }
   function applyEditCell(employeeId: number, col: ColKey, value: string) {
-    setEdits((prev) => { const key = `${employeeId}-${col}`; const emp = displayEmployees.find((e) => e.id === employeeId); if (!emp) return prev; const original = prev[key]?.original ?? getOriginalValue(emp, col, effectiveDate); return { ...prev, [key]: { original, current: value } }; });
+    setEdits((prev) => { const key = `${employeeId}-${col}`; const emp = baseEmployees.find((e) => e.id === employeeId); if (!emp) return prev; const original = prev[key]?.original ?? getOriginalValue(emp, col, effectiveDate); return { ...prev, [key]: { original, current: value } }; });
   }
   function handleAssistantAction(action: PowerEditAction) {
     switch (action.type) {
@@ -802,11 +1065,13 @@ export function PowerEdit() {
   const activeColsForContext = [...selectedFieldsToColumns(selectedFields, baseColumns), ...(useIndividualDates ? [{ key: 'effectiveDate' as ColKey, label: 'Effective Date' }] : [])];
   const tableContext: TableContext = { columns: activeColsForContext, employees: displayEmployees.map((e) => ({ id: e.id, data: Object.fromEntries(activeColsForContext.map((col) => [col.label, edits[`${e.id}-${col.key}`]?.current ?? getOriginalValue(e, col.key, effectiveDate)])) })) };
   const sortedEmployees = sortCol ? [...displayEmployees].sort((a, b) => {
-    if (sortCol === 'salary') { const diff = getSalary(a.id) - getSalary(b.id); return sortDir === 'asc' ? diff : -diff; }
+    if (sortCol === 'salary') { const diff = a.salary - b.salary; return sortDir === 'asc' ? diff : -diff; }
     let av = getOriginalValue(a, sortCol, effectiveDate); let bv = getOriginalValue(b, sortCol, effectiveDate);
     if (sortCol === 'hireDate') { av = parseMDYToISO(av); bv = parseMDYToISO(bv); }
     const cmp = av.localeCompare(bv); return sortDir === 'asc' ? cmp : -cmp;
   }) : displayEmployees;
+
+  const configuredFilters = filters.filter((f) => f.value || f.dateTo);
 
 
   return (
@@ -912,7 +1177,7 @@ export function PowerEdit() {
               endIcon={<IconV2 name="caret-down-solid" size={10} />}
               onClick={() => setFiltersOpen((v) => !v)}
             >
-              {filters.length > 0 ? `Filters (${filters.length})` : 'Filters'}
+              {configuredFilters.length > 0 ? `Filters (${configuredFilters.length})` : 'Filters'}
             </Button>
             {filtersOpen && <FiltersPanel onClose={() => { setFiltersOpen(false); setPendingFilterField(null); }} initialFilterField={pendingFilterField} filters={filters} onFiltersChange={setFilters} matchAll={filterMatchAll} onMatchAllChange={setFilterMatchAll} nextIdRef={filterNextId} />}
           </div>
@@ -942,9 +1207,21 @@ export function PowerEdit() {
         {/* Table or blank state */}
         {sortedEmployees.length === 0 ? (
           <Section ariaLabel="Edit table">
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '64px 0', gap: 8 }}>
-              <BodyText size="large" weight="semibold" color="neutral-medium">Nothing in the works yet...</BodyText>
-              <BodyText size="medium" color="neutral-medium">Use the assistant to get started, or add employees using the toolbar above.</BodyText>
+            <div style={{ paddingTop: 125, paddingBottom: 125 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 16 }}>
+              <div style={{ width: 120, height: 120 }}>
+                <ClipboardIcon />
+              </div>
+            </div>
+            <BlankState
+              level="widget"
+              title={
+                <span style={{ paddingTop: 16, display: 'block' }}>
+                  <Headline size="small" component="h4" color="neutral-medium">{configuredFilters.length > 0 ? 'No results match your filters' : 'Nothing in the works yet...'}</Headline>
+                </span>
+              }
+              subtitle={configuredFilters.length > 0 ? 'Try adjusting your filters to see employees.' : 'Use the assistant to get started, or add employees using the toolbar above.'}
+            />
             </div>
           </Section>
         ) : (
@@ -1020,7 +1297,7 @@ export function PowerEdit() {
                                   onSelect={(v) => {
                                     if (!editingCell) return;
                                     const key = `${editingCell.id}-${editingCell.col}`;
-                                    const emp = displayEmployees.find((e) => e.id === editingCell.id)!;
+                                    const emp = baseEmployees.find((e) => e.id === editingCell.id)!;
                                     const original = getOriginalValue(emp, editingCell.col, effectiveDate);
                                     const newVal = v.trim();
                                     if (newVal && newVal !== original) setEdits((prev) => ({ ...prev, [key]: { original, current: newVal } }));
@@ -1107,7 +1384,7 @@ export function PowerEdit() {
       )}
 
 
-      {bulkEditCol && <BulkEditPanel col={bulkEditCol} rowCount={displayEmployees.length} onApply={(value) => applyBulkEdit(bulkEditCol.key, value)} onClose={() => setBulkEditCol(null)} />}
+      {bulkEditCol && <BulkEditPanel col={bulkEditCol} rowCount={baseEmployees.length} onApply={(value) => applyBulkEdit(bulkEditCol.key, value)} onClose={() => setBulkEditCol(null)} />}
 
       {/* Footer */}
       {isReadonly ? (
@@ -1123,11 +1400,11 @@ export function PowerEdit() {
           <ActionFooter
             actions={[
               <Button key="publish" variant="contained" color="primary" size="medium"
-                onClick={() => { if (!editTitle.trim()) { setTitleError(true); setTitleEditing(true); setSlidedown({ message: 'Give your edit a name before publishing.', type: 'error' }); return; } navigate('/people/power-edit', { state: { toast: 'published', sessionName: editTitle, activeTab: 'completed' } }); }}>
+                onClick={() => { if (!editTitle.trim()) { setTitleError(true); setTitleEditing(true); showSlidedown('Give your edit a name before publishing.', SLIDEDOWN_TYPES.error); return; } navigate('/people/power-edit', { state: { toast: 'published', sessionName: editTitle, activeTab: 'completed' } }); }}>
                 Publish Changes
               </Button>,
               <Button key="save" variant="outlined" color="secondary" size="medium"
-                onClick={() => { if (!editTitle.trim()) { setTitleError(true); setTitleEditing(true); setSlidedown({ message: 'Give your edit a name before saving.', type: 'error' }); return; } navigate('/people/power-edit', { state: { toast: 'draft', sessionName: editTitle, activeTab: 'draft' } }); }}>
+                onClick={() => { if (!editTitle.trim()) { setTitleError(true); setTitleEditing(true); showSlidedown('Give your edit a name before saving.', SLIDEDOWN_TYPES.error); return; } navigate('/people/power-edit', { state: { toast: 'draft', sessionName: editTitle, activeTab: 'draft' } }); }}>
                 Save &amp; Finish Later
               </Button>,
               <TextButton key="cancel" size="medium" onClick={() => setCancelConfirmOpen(true)}>Cancel</TextButton>,
@@ -1138,14 +1415,14 @@ export function PowerEdit() {
 
       {/* Cancel confirmation modal */}
       <StandardModal isOpen={cancelConfirmOpen} onRequestClose={() => setCancelConfirmOpen(false)}>
-        <StandardModal.HeroHeadline icon="pen-to-square-solid" text="Save before leaving?" />
         <StandardModal.Body
+          renderHeader={<StandardModal.Header title="Just checking..." />}
           renderFooter={
             <StandardModal.Footer
               actions={[
-                <TextButton key="delete" color="secondary" onClick={() => navigate('/people/power-edit')}>Delete these edits</TextButton>,
+                <TextButton key="discard" onClick={() => navigate('/people/power-edit')}>Delete these edits</TextButton>,
                 <Button key="save" variant="contained" color="primary"
-                  onClick={() => { if (!editTitle.trim()) { setCancelConfirmOpen(false); setTitleError(true); setTitleEditing(true); setSlidedown({ message: 'Give your edit a name before saving.', type: 'error' }); return; } navigate('/people/power-edit', { state: { toast: 'draft', sessionName: editTitle, activeTab: 'draft' } }); }}>
+                  onClick={() => { if (!editTitle.trim()) { setCancelConfirmOpen(false); setTitleError(true); setTitleEditing(true); showSlidedown('Give your edit a name before saving.', SLIDEDOWN_TYPES.error); return; } navigate('/people/power-edit', { state: { toast: 'draft', sessionName: editTitle, activeTab: 'draft' } }); }}>
                   Save &amp; Finish Later
                 </Button>,
               ]}
@@ -1153,24 +1430,26 @@ export function PowerEdit() {
           }
         >
           <StandardModal.UpperContent>
-            <BodyText size="medium" color="neutral-medium">
-              You have unsaved changes. Save as a draft to continue editing later, or discard them entirely.
-            </BodyText>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 12, padding: '24px 0 16px', width: '100%' }}>
+              <IconTile icon={<IconV2 name="triangle-exclamation-regular" color="warning-strong" size={24} />} size={56} variant="muted" />
+              <Headline size="small" component="h4" color="neutral-strong">You still have some unsaved changes...</Headline>
+              <BodyText size="medium" color="neutral-weak">You'll lose those changes if you continue and leave.</BodyText>
+            </div>
           </StandardModal.UpperContent>
         </StandardModal.Body>
       </StandardModal>
 
+      </div>{/* end main content column */}
+
       {/* Slidedown notification */}
-      {slidedown && (
-        <SimpleSlidedown
-          show
-          showDismiss
-          onDismiss={() => setSlidedown(null)}
-          message={slidedown.message}
-          type={slidedown.type}
+      {slidedownContent && (
+        <SlidedownPortal
+          show={slidedownVisible}
+          onDismiss={dismissSlidedown}
+          message={slidedownContent.message}
+          type={slidedownContent.type}
         />
       )}
-      </div>{/* end main content column */}
 
       {/* Assistant panel — sits outside the page capsule, pushes content left */}
       <style>{`
@@ -1184,7 +1463,7 @@ export function PowerEdit() {
         }
       `}</style>
       {describeItOpen && (
-        <div style={{ width: 376, flexShrink: 0, padding: '0 0 24px 16px', display: 'flex', animation: `${describeItClosing ? 'pe-panel-out' : 'pe-panel-in'} 280ms cubic-bezier(0.4,0,0.2,1) both` }}>
+        <div style={{ width: 376, flexShrink: 0, padding: '0 0 24px 0', display: 'flex', animation: `${describeItClosing ? 'pe-panel-out' : 'pe-panel-in'} 280ms cubic-bezier(0.4,0,0.2,1) both` }}>
           <DescribeItPanel
             onClose={closeDescribeIt}
             onAction={handleAssistantAction}

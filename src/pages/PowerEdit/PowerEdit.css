@@ -1,0 +1,7 @@
+/* Override ButtonGroup last-button radius for IconButton (e.g. Fields panel Close)
+   so the button is fully rounded instead of square on the left. */
+.MuiButtonGroup-root .MuiButtonGroup-lastButton[data-fabric-component="IconButton"] {
+  border-top-left-radius: 100px;
+  border-bottom-left-radius: 100px;
+  border-radius: 100px;
+}
