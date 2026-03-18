@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { InputAdornment } from '@mui/material';
 import {
@@ -25,6 +26,11 @@ import {
   RoundedToggle,
   BlankState,
   IconTile,
+  DataGrid,
+  type DataGridRef,
+  type CellEditingStoppedEvent,
+  type ICellRendererParams,
+  type IHeaderParams,
 } from '@bamboohr/fabric';
 import { ClipboardIcon } from '../../assets/ClipboardIcon';
 import { employees, type Employee } from '../../data/employees';
@@ -525,6 +531,8 @@ type ColKey =
   | 'taskName' | 'taskDueDate' | 'taskStatus' | 'taskAssignee'
   | 'tenureYears' | 'age' | 'daysSinceHire';
 
+type EmployeeRow = { id: number } & Record<string, string | number>;
+
 const DATE_COL_KEYS = new Set<ColKey>([
   'hireDate', 'effectiveDate', 'birthDate',
   'timeOffNextAccrual', 'benefitEffectiveDate', 'trainingCompletionDate',
@@ -629,6 +637,10 @@ const FIELD_TO_COL: Partial<Record<string, { key: ColKey; label: string; align?:
 const DEFAULT_SELECTED_FIELDS: string[] = [];
 const DEFAULT_ALL_COLUMNS: { key: ColKey; label: string; align?: 'right' }[] = [{ key: 'name', label: 'Name' }, { key: 'title', label: 'Job Title' }, { key: 'reportsTo', label: 'Reports To' }, { key: 'hireDate', label: 'Hire Date' }, { key: 'salary', label: 'Pay Rate', align: 'right' }];
 const NEW_EDIT_COLUMNS: { key: ColKey; label: string; align?: 'right' }[] = [{ key: 'name', label: 'Name' }];
+const ALL_COL_KEYS: ColKey[] = [...new Set([
+  ...DEFAULT_ALL_COLUMNS.map((c) => c.key),
+  ...Object.values(FIELD_TO_COL).filter(Boolean).map((c) => c!.key),
+])];
 
 function syncFieldsToColOrder(newColOrder: ColKey[], fields: string[]): string[] {
   const result: string[] = []; const handled = new Set<string>();
@@ -950,6 +962,33 @@ function applyFilters(emps: Employee[], filters: FilterRecord[], matchAll: boole
   });
 }
 
+// ─── DataGrid Column Header (V2) ──────────────────────────────────────────────
+function DataGridColHeader(props: IHeaderParams & { onMenuOpen: (anchor: DOMRect) => void }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <div
+      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: 4, minWidth: 0 }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <BodyText size="small" weight="semibold">{props.displayName}</BodyText>
+      <span style={{ flexShrink: 0, opacity: hovered ? 1 : 0, pointerEvents: hovered ? 'auto' : 'none', transition: 'opacity 0.15s' }}>
+        <IconButton
+          icon="ellipsis-vertical-solid"
+          aria-label={`${props.displayName} column options`}
+          variant="text"
+          color="secondary"
+          size="small"
+          onClick={(e: React.MouseEvent) => {
+            e.stopPropagation();
+            props.onMenuOpen((e.currentTarget as HTMLElement).getBoundingClientRect());
+          }}
+        />
+      </span>
+    </div>
+  );
+}
+
 // ─── Main PowerEdit Component ─────────────────────────────────────────────────
 export function PowerEdit() {
   const navigate = useNavigate();
@@ -1012,6 +1051,9 @@ export function PowerEdit() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [footerElevated, setFooterElevated] = useState(false);
   const commitEditRef = useRef<(override?: string) => void>(() => {});
+  const editsRef = useRef(edits);
+  useEffect(() => { editsRef.current = edits; }, [edits]);
+  const dataGridRef = useRef<DataGridRef<EmployeeRow>>(null);
 
   function handleContentScroll() {
     const el = scrollContainerRef.current;
@@ -1021,6 +1063,11 @@ export function PowerEdit() {
 
   useEffect(() => { if (!hasSelection) { const t = setTimeout(() => setDescribeItOpen(true), 1000); return () => clearTimeout(t); } }, []);
   useEffect(() => { return () => { localStorage.removeItem('bhr-describe-it-open'); }; }, []);
+  useEffect(() => {
+    const el = document.querySelector('.app-layout') as HTMLElement | null;
+    if (el) el.style.marginTop = '36px';
+    return () => { if (el) el.style.marginTop = ''; };
+  }, []);
   useEffect(() => { commitEditRef.current = commitEdit; });
   useEffect(() => {
     if (!editingCell) return;
@@ -1066,8 +1113,11 @@ export function PowerEdit() {
     }
   }
 
-  const activeColsForContext = [...selectedFieldsToColumns(selectedFields, baseColumns), ...(useIndividualDates ? [{ key: 'effectiveDate' as ColKey, label: 'Effective Date' }] : [])];
-  const tableContext: TableContext = { columns: activeColsForContext, employees: displayEmployees.map((e) => ({ id: e.id, data: Object.fromEntries(activeColsForContext.map((col) => [col.label, edits[`${e.id}-${col.key}`]?.current ?? getOriginalValue(e, col.key, effectiveDate)])) })) };
+  const activeCols = useMemo(
+    () => [...selectedFieldsToColumns(selectedFields, baseColumns), ...(useIndividualDates ? [{ key: 'effectiveDate' as ColKey, label: 'Effective Date' }] : [])],
+    [selectedFields, baseColumns, useIndividualDates]
+  );
+  const tableContext: TableContext = { columns: activeCols, employees: displayEmployees.map((e) => ({ id: e.id, data: Object.fromEntries(activeCols.map((col) => [col.label, edits[`${e.id}-${col.key}`]?.current ?? getOriginalValue(e, col.key, effectiveDate)])) })) };
   const sortedEmployees = sortCol ? [...displayEmployees].sort((a, b) => {
     if (sortCol === 'salary') { const diff = a.salary - b.salary; return sortDir === 'asc' ? diff : -diff; }
     let av = getOriginalValue(a, sortCol, effectiveDate); let bv = getOriginalValue(b, sortCol, effectiveDate);
@@ -1076,10 +1126,100 @@ export function PowerEdit() {
   }) : displayEmployees;
 
   const configuredFilters = filters.filter((f) => f.value || f.dateTo);
+  const [version, setVersion] = useState<1 | 2>(1);
 
+  // ── V2 DataGrid helpers ──────────────────────────────────────────────────────
+  function buildRows(): EmployeeRow[] {
+    return sortedEmployees.map((emp) => {
+      const row: EmployeeRow = { id: emp.id };
+      ALL_COL_KEYS.forEach((key) => {
+        const editKey = `${emp.id}-${key}`;
+        row[key] = editsRef.current[editKey]?.current ?? getOriginalValue(emp, key, effectiveDate);
+      });
+      return row;
+    });
+  }
+
+  useEffect(() => {
+    if (version === 2) dataGridRef.current?.setRowData(buildRows());
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [edits, sortedEmployees, version]);
+
+  const colDefs = useMemo(() => {
+    if (version !== 2) return [];
+    return activeCols.map((col) => ({
+      field: col.key,
+      headerName: col.label,
+      headerComponent: DataGridColHeader,
+      headerComponentParams: {
+        onMenuOpen: (anchor: DOMRect) => {
+          setOpenHeaderMenuCol({ key: col.key, label: col.label, anchor });
+        },
+      },
+      editable: !isReadonly,
+      cellEditorParams: {
+        getType: () =>
+          COL_OPTIONS[col.key] ? 'dropdown'
+          : DATE_COL_KEYS.has(col.key) ? 'date'
+          : 'text',
+        ...(COL_OPTIONS[col.key] ? {
+          options: (COL_OPTIONS[col.key] ?? []).map((o) => ({ text: o, value: o })),
+          showSearch: true,
+        } : {}),
+      },
+      cellRendererParams: {
+        getStatus: (params: ICellRendererParams) => {
+          if (!params.data) return null;
+          const editKey = `${params.data.id}-${col.key}`;
+          const edit = editsRef.current[editKey];
+          if (!edit) return null;
+          return {
+            status: 'info' as const,
+            title: 'Value changed',
+            message: (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <BodyText size="extra-small" color="neutral-weak">Original: {edit.original}</BodyText>
+                <TextButton size="small" onClick={() => {
+                  setEdits((prev) => { const next = { ...prev }; delete next[editKey]; return next; });
+                }}>Revert</TextButton>
+              </div>
+            ),
+          };
+        },
+      },
+    }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCols, version, isReadonly]);
+
+  function handleCellEditingStopped(event: CellEditingStoppedEvent<EmployeeRow>) {
+    const { data, colDef, newValue } = event;
+    if (newValue === undefined || newValue === null || !data) return;
+    const col = colDef.field as ColKey;
+    const editKey = `${data.id}-${col}`;
+    const emp = baseEmployees.find((e) => e.id === data.id);
+    if (!emp) return;
+    const original = editsRef.current[editKey]?.original ?? getOriginalValue(emp, col, effectiveDate);
+    const displayValue = DATE_COL_KEYS.has(col)
+      ? (col === 'hireDate' || col === 'birthDate' ? parseISOToMDY(newValue) : formatDateDisplay(newValue))
+      : String(newValue).trim();
+    if (displayValue && displayValue !== original) {
+      setEdits((prev) => ({ ...prev, [editKey]: { original, current: displayValue } }));
+    } else {
+      setEdits((prev) => { const next = { ...prev }; delete next[editKey]; return next; });
+    }
+  }
 
   return (
-    <div style={{ display: 'flex', flex: 1, minWidth: 0, gap: '12px' }}>
+    <>
+    {createPortal(
+      <div className="pe-version-bar">
+        <span className="pe-version-bar__label">Prototype</span>
+        <button className={`pe-version-btn${version === 1 ? ' pe-version-btn--active' : ''}`} onClick={() => setVersion(1)}>Version 1</button>
+        <button className={`pe-version-btn${version === 2 ? ' pe-version-btn--active' : ''}`} onClick={() => setVersion(2)}>Version 2</button>
+      </div>,
+      document.body
+    )}
+    <div style={{ display: 'flex', flex: 1, minWidth: 0, gap: '12px', minHeight: 0 }}>
       {/* Main content column — white rounded card matching PageCapsule visual */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden', background: 'var(--surface-neutral-white)', borderRadius: 20, margin: '0 0 24px 0' }}>
       <div ref={scrollContainerRef} onScroll={handleContentScroll} style={{ flex: 1, overflowY: 'auto', padding: '32px 32px 32px 32px', background: 'var(--surface-neutral-xx-weak)' }}>
@@ -1228,10 +1368,22 @@ export function PowerEdit() {
             />
             </div>
           </Section>
+        ) : version === 2 ? (
+          <Section ariaLabel="Edit table" paddingTop="20px">
+            <DataGrid
+              ref={dataGridRef}
+              columnDefs={colDefs}
+              initialRowData={buildRows()}
+              getRowId={({ data }) => String(data.id)}
+              domLayout="autoHeight"
+              hideRowNumbers={true}
+              defaultColDef={{ resizable: true, suppressMovable: false }}
+              onCellEditingStopped={handleCellEditingStopped}
+            />
+          </Section>
         ) : (
           <Section ariaLabel="Edit table" paddingTop="20px">
             {(() => {
-              const activeCols = [...selectedFieldsToColumns(selectedFields, baseColumns), ...(useIndividualDates ? [{ key: 'effectiveDate' as ColKey, label: 'Effective Date' }] : [])];
               const lastColKey = activeCols[activeCols.length - 1]?.key;
               return (
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -1358,12 +1510,12 @@ export function PowerEdit() {
                                   </div>
                                   <span className="pe-cell__edit-btn">
                                     <IconButton
-                                      icon="pen-regular"
-                                      aria-label="Edit"
+                                      icon="arrow-rotate-left-regular"
+                                      aria-label="Revert"
                                       size="small"
                                       variant="outlined"
                                       color="secondary"
-                                      onClick={(e: React.MouseEvent) => { e.stopPropagation(); startEditing(employee.id, col.key, displayValue); }}
+                                      onClick={(e: React.MouseEvent) => { e.stopPropagation(); setEdits((prev) => { const next = { ...prev }; delete next[cellKey]; return next; }); }}
                                     />
                                   </span>
                                 </>
@@ -1497,6 +1649,7 @@ export function PowerEdit() {
         </div>
       )}
     </div>
+    </>
   );
 }
 
