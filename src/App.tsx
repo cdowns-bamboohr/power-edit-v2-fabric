@@ -1,5 +1,5 @@
 import { useState, Suspense, lazy } from 'react';
-import { Routes, Route, Link, Link as RouterLink, useLocation } from 'react-router-dom';
+import { Routes, Route, Link, Link as RouterLink, Navigate, useLocation } from 'react-router-dom';
 import {
   BodyText,
   Headline,
@@ -305,7 +305,8 @@ function App() {
     <DatePickerProvider>
     <Suspense fallback={<PageLoader />}>
       <Routes>
-        <Route path="/" element={<FullLayout><PrototypeIndex /></FullLayout>} />
+        <Route path="/" element={<Navigate to="/people" replace />} />
+        <Route path="/index" element={<FullLayout><PrototypeIndex /></FullLayout>} />
         <Route path="/navigation-option-a" element={<FullLayout><NavigationOptionA /></FullLayout>} />
         {/* Files routes - each category has its own route */}
         <Route path="/files" element={<FullLayout><Files category="all" /></FullLayout>} />

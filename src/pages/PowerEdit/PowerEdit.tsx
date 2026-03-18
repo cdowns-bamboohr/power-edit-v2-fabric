@@ -342,9 +342,13 @@ function FiltersPanel({ onClose, initialFilterField, filters, onFiltersChange, m
   const panelRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     function h(e: MouseEvent) {
-      // Don't close while a Fabric SelectField portal (listbox) is open — user is picking a value
-      if (document.querySelector('[role="listbox"]')) return;
-      if (panelRef.current && !panelRef.current.contains(e.target as Node)) onClose();
+      // Don't close while a Fabric Select menu is open — user is picking a value
+      const target = e.target as Node;
+      const hasOpenMenu = document.querySelector('[data-fabric-component="Select"]')?.contains(target)
+        || document.querySelector('[role="menu"]')?.contains(target)
+        || document.querySelector('[role="listbox"]')?.contains(target);
+      if (hasOpenMenu) return;
+      if (panelRef.current && !panelRef.current.contains(target)) onClose();
     }
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
@@ -353,8 +357,6 @@ function FiltersPanel({ onClose, initialFilterField, filters, onFiltersChange, m
   function updateFilter(id: number, patch: Partial<FilterRecord>) { onFiltersChange(filters.map((f) => (f.id === id ? { ...f, ...patch } : f))); }
   function removeFilter(id: number) { onFiltersChange(filters.filter((f) => f.id !== id)); }
   function addFilter() { onFiltersChange([...filters, { id: nextIdRef.current++, field: 'Department', operator: 'is', value: '', dateTo: '' }]); }
-
-  const fieldItems = FILTER_FIELD_OPTIONS.map((f) => ({ text: f, value: f }));
 
   return (
     <div ref={panelRef} style={{ position: 'absolute', top: '100%', left: 0, marginTop: 8, zIndex: 50, background: 'var(--surface-neutral-white)', borderRadius: 16, padding: 20, display: 'flex', flexDirection: 'column', gap: 12, minWidth: 580, boxShadow: '3px 3px 10px 2px rgba(56,49,47,0.10), 1px 1px 0px 1px rgba(56,49,47,0.04)' }}>
@@ -398,35 +400,34 @@ function FiltersPanel({ onClose, initialFilterField, filters, onFiltersChange, m
         {filters.map((filter) => {
           const isDate = DATE_FILTER_FIELDS.has(filter.field);
           const operators = FILTER_OPERATORS[isDate ? 'date' : 'default'];
-          const operatorItems = operators.map((op) => ({ text: op, value: op }));
-          const valueItems = [{ text: 'Select...', value: '' }, ...(FILTER_FIELD_VALUES[filter.field] ?? []).map((v) => ({ text: v, value: v }))];
+          const valueOptions = FILTER_FIELD_VALUES[filter.field] ?? [];
+          const selectStyle: React.CSSProperties = {
+            height: 32, borderRadius: 8, border: '1px solid #c6c2bf', background: '#fff',
+            color: '#48413f', fontSize: 14, padding: '0 28px 0 12px', cursor: 'pointer',
+            appearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23868180' d='M1.41 0L6 4.59 10.59 0 12 1.42l-6 6-6-6z'/%3E%3C/svg%3E")`,
+            backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center', outline: 'none', boxSizing: 'border-box',
+          };
           return (
             <div key={filter.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               {/* Field selector */}
-              <div style={{ flexShrink: 0, width: 148 }}>
-                <SelectField
-                  ariaLabel="Filter field"
-                  size="small"
-                  items={fieldItems}
-                  value={filter.field}
-                  isClearable={false}
-                  onSelect={(v) => {
-                    const newField = v as string;
-                    updateFilter(filter.id, { field: newField, operator: FILTER_OPERATORS[DATE_FILTER_FIELDS.has(newField) ? 'date' : 'default'][0], value: '', dateTo: '' });
-                  }}
-                />
-              </div>
+              <select
+                value={filter.field}
+                onChange={(e) => {
+                  const newField = e.target.value;
+                  updateFilter(filter.id, { field: newField, operator: FILTER_OPERATORS[DATE_FILTER_FIELDS.has(newField) ? 'date' : 'default'][0], value: '', dateTo: '' });
+                }}
+                style={{ ...selectStyle, flexShrink: 0, width: 148 }}
+              >
+                {FILTER_FIELD_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
+              </select>
               {/* Operator selector */}
-              <div style={{ flexShrink: 0, width: 120 }}>
-                <SelectField
-                  ariaLabel="Filter operator"
-                  size="small"
-                  items={operatorItems}
-                  value={filter.operator}
-                  isClearable={false}
-                  onSelect={(v) => updateFilter(filter.id, { operator: v as string })}
-                />
-              </div>
+              <select
+                value={filter.operator}
+                onChange={(e) => updateFilter(filter.id, { operator: e.target.value })}
+                style={{ ...selectStyle, flexShrink: 0, width: 120 }}
+              >
+                {operators.map((op) => <option key={op} value={op}>{op}</option>)}
+              </select>
               {/* Value */}
               {isDate ? (
                 <>
@@ -449,16 +450,14 @@ function FiltersPanel({ onClose, initialFilterField, filters, onFiltersChange, m
                   </div>
                 </>
               ) : (
-                <div style={{ flexShrink: 0, width: 160 }}>
-                  <SelectField
-                    ariaLabel="Filter value"
-                    size="small"
-                    items={valueItems}
-                    value={filter.value || ''}
-                    isClearable={false}
-                    onSelect={(v) => updateFilter(filter.id, { value: v as string })}
-                  />
-                </div>
+                <select
+                  value={filter.value}
+                  onChange={(e) => updateFilter(filter.id, { value: e.target.value })}
+                  style={{ ...selectStyle, flexShrink: 0, width: 160 }}
+                >
+                  <option value="">Select...</option>
+                  {valueOptions.map((v) => <option key={v} value={v}>{v}</option>)}
+                </select>
               )}
               {/* Remove */}
               <IconButton
