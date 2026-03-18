@@ -750,30 +750,22 @@ function CellSelect({ colLabel, value, items, onSelect, onClear, onClose }: {
   onClear: () => void;
   onClose: () => void;
 }) {
-  const divRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      const btn = divRef.current?.querySelector<HTMLButtonElement>('button');
-      if (btn) {
-        btn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
-        btn.click();
-      }
-    }, 0);
-    return () => clearTimeout(timer);
-  }, []);
+  const [isOpen, setIsOpen] = useState(true);
   return (
-    <div ref={divRef} onClick={(e) => e.stopPropagation()}>
+    <div onClick={(e) => e.stopPropagation()}>
       <SelectField
         ariaLabel={colLabel}
         size="small"
         width={100}
         isClearable={true}
         showSearch="always"
+        open={isOpen}
+        onOpen={() => setIsOpen(true)}
+        onClose={() => { setIsOpen(false); onClose(); }}
         value={value}
         items={items}
         onSelect={(v) => onSelect(v as string)}
         onClear={onClear}
-        onClose={onClose}
       />
     </div>
   );
@@ -1019,6 +1011,7 @@ export function PowerEdit() {
   const [pendingFilterField, setPendingFilterField] = useState<string | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [footerElevated, setFooterElevated] = useState(false);
+  const commitEditRef = useRef<(override?: string) => void>(() => {});
 
   function handleContentScroll() {
     const el = scrollContainerRef.current;
@@ -1028,6 +1021,18 @@ export function PowerEdit() {
 
   useEffect(() => { if (!hasSelection) { const t = setTimeout(() => setDescribeItOpen(true), 1000); return () => clearTimeout(t); } }, []);
   useEffect(() => { return () => { localStorage.removeItem('bhr-describe-it-open'); }; }, []);
+  useEffect(() => { commitEditRef.current = commitEdit; });
+  useEffect(() => {
+    if (!editingCell) return;
+    if (COL_OPTIONS[editingCell.col] || DATE_COL_KEYS.has(editingCell.col)) return;
+    function handleClick(e: MouseEvent) {
+      if (!(e.target as HTMLElement).closest('.pe-cell--editing')) {
+        commitEditRef.current();
+      }
+    }
+    document.addEventListener('click', handleClick, true);
+    return () => document.removeEventListener('click', handleClick, true);
+  }, [editingCell]);
 
   const displayEmployees = applyFilters(baseEmployees, filters, filterMatchAll);
 
@@ -1284,10 +1289,7 @@ export function PowerEdit() {
                           const displayValue = getCellDisplayValue(employee, col.key);
                           const isNameCol = col.key === 'name';
                           return (
-                            <td key={col.key} style={{ padding: isEditing ? 8 : 16, cursor: 'text', textAlign: col.align ?? 'left' }}
-                              onClick={() => {
-                                if (!isEditing) startEditing(employee.id, col.key, displayValue);
-                              }}>
+                            <td key={col.key} className={`pe-cell${isEditing ? ' pe-cell--editing' : ''}`} style={{ padding: isEditing ? 8 : 16, textAlign: col.align ?? 'left' }}>
                               {isEditing && COL_OPTIONS[col.key] ? (
                                 <CellSelect
                                   colLabel={col.label}
@@ -1311,7 +1313,7 @@ export function PowerEdit() {
                                   onClose={() => setEditingCell(null)}
                                 />
                               ) : isEditing && DATE_COL_KEYS.has(col.key) ? (
-                                <div style={{ width: 140 }} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => { if (e.key === 'Escape') setEditingCell(null); }}>
+                                <div style={{ width: '100%', minWidth: 0 }} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => { if (e.key === 'Escape') setEditingCell(null); }}>
                                   <DatePicker
                                     open={true}
                                     value={col.key === 'hireDate' || col.key === 'birthDate' ? parseMDYToISO(editingValue) : parseDisplayToISO(editingValue)}
@@ -1320,14 +1322,13 @@ export function PowerEdit() {
                                     }}
                                     onClose={() => setEditingCell(null)}
                                     size="small"
-                                    width={100}
                                   />
                                 </div>
                               ) : isEditing ? (
+                                <div style={{ width: '100%', minWidth: 0 }}>
                                 <TextField
                                   autoFocus
                                   size="small"
-                                  width={100}
                                   value={editingValue}
                                   onChange={(e) => setEditingValue((e.target as HTMLInputElement).value)}
                                   onKeyDown={(e) => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditingCell(null); }}
@@ -1346,17 +1347,42 @@ export function PowerEdit() {
                                     ),
                                   } : undefined}
                                 />
-                              ) : edit ? (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                                  <span style={{ textDecoration: 'line-through' }}>
-                                    <BodyText size="small" color="neutral-weak">{edit.original}</BodyText>
-                                  </span>
-                                  <BodyText size="medium" weight="medium" color="primary">{edit.current}</BodyText>
                                 </div>
+                              ) : edit ? (
+                                <>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                    <span style={{ textDecoration: 'line-through' }}>
+                                      <BodyText size="small" color="neutral-weak">{edit.original}</BodyText>
+                                    </span>
+                                    <BodyText size="medium" weight="medium" color="primary">{edit.current}</BodyText>
+                                  </div>
+                                  <span className="pe-cell__edit-btn">
+                                    <IconButton
+                                      icon="pen-regular"
+                                      aria-label="Edit"
+                                      size="small"
+                                      variant="outlined"
+                                      color="secondary"
+                                      onClick={(e: React.MouseEvent) => { e.stopPropagation(); startEditing(employee.id, col.key, displayValue); }}
+                                    />
+                                  </span>
+                                </>
                               ) : (
-                                <span style={isNameCol ? { color: '#0b4fd1' } : undefined}>
-                                  <BodyText size="medium" weight={isNameCol ? 'medium' : 'regular'}>{displayValue}</BodyText>
-                                </span>
+                                <>
+                                  <span style={isNameCol ? { color: '#0b4fd1' } : undefined}>
+                                    <BodyText size="medium" weight={isNameCol ? 'medium' : 'regular'}>{displayValue}</BodyText>
+                                  </span>
+                                  <span className="pe-cell__edit-btn">
+                                    <IconButton
+                                      icon="pen-regular"
+                                      aria-label="Edit"
+                                      size="small"
+                                      variant="outlined"
+                                      color="secondary"
+                                      onClick={(e: React.MouseEvent) => { e.stopPropagation(); startEditing(employee.id, col.key, displayValue); }}
+                                    />
+                                  </span>
+                                </>
                               )}
                             </td>
                           );

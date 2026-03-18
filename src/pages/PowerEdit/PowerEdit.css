@@ -1,3 +1,9 @@
+.pe-cell { cursor: default; position: relative; overflow: visible; max-width: 0; }
+.pe-cell .MuiFormControl-root { width: 100% !important; min-width: 0 !important; }
+.pe-cell .MuiInputBase-root { min-width: 0 !important; }
+.pe-cell__edit-btn { opacity: 0; pointer-events: none; transition: opacity 0.1s; position: absolute; right: 8px; top: 50%; transform: translateY(-50%); z-index: 1; }
+.pe-cell:hover .pe-cell__edit-btn { opacity: 1; pointer-events: auto; }
+
 /* Override ButtonGroup last-button radius for IconButton (e.g. Fields panel Close)
    so the button is fully rounded instead of square on the left. */
 .MuiButtonGroup-root .MuiButtonGroup-lastButton[data-fabric-component="IconButton"] {
