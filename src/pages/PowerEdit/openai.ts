@@ -11,7 +11,8 @@ export type PowerEditAction =
   | { type: 'add_field'; fieldName: string }
   | { type: 'remove_column'; col: string }
   | { type: 'reset_column'; col: string }
-  | { type: 'edit_cell'; employeeId: number; col: string; value: string };
+  | { type: 'edit_cell'; employeeId: number; col: string; value: string }
+  | { type: 'add_filter'; field: string; operator: string; value: string };
 
 export interface TableContext {
   columns: { key: string; label: string }[];
@@ -111,6 +112,33 @@ const TOOLS = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'add_filter',
+      description: 'Add a filter to narrow the employee list. For example, "show only Product department" or "filter to full-time employees".',
+      parameters: {
+        type: 'object',
+        properties: {
+          field: {
+            type: 'string',
+            enum: ['Department', 'Location', 'Division', 'Employment Type', 'Employment Status', 'Job Title', 'Gender', 'Ethnicity'],
+            description: 'The field to filter on.',
+          },
+          operator: {
+            type: 'string',
+            enum: ['is', 'is not', 'includes', 'excludes'],
+            description: 'The filter operator.',
+          },
+          value: {
+            type: 'string',
+            description: 'The value to filter by (e.g. "Product", "Full-Time", "Engineering").',
+          },
+        },
+        required: ['field', 'operator', 'value'],
+      },
+    },
+  },
 ];
 
 // ─── System prompt ────────────────────────────────────────────────────────────
@@ -146,7 +174,8 @@ Column key reference:
 Guidelines:
 - Be concise — one or two sentences after applying changes is enough.
 - If the user's request is ambiguous, ask a quick clarifying question before acting.
-- If you need to edit multiple employees individually, call edit_cell for each one.`;
+- If you need to edit multiple employees individually, call edit_cell for each one.
+- Use add_filter to narrow the employee list when the user says things like "show only Product", "pull in everyone from Engineering", or "filter to full-time employees". The filter immediately updates which employees are visible in the table.`;
 }
 
 // ─── API call ─────────────────────────────────────────────────────────────────
@@ -238,6 +267,10 @@ export async function sendMessage(
             case 'edit_cell':
               collectedActions.push({ type: 'edit_cell', employeeId: args.employeeId, col: args.col, value: args.value });
               result = `Updated ${args.col} for employee ${args.employeeId} to "${args.value}"`;
+              break;
+            case 'add_filter':
+              collectedActions.push({ type: 'add_filter', field: args.field, operator: args.operator, value: args.value });
+              result = `Added filter: ${args.field} ${args.operator} "${args.value}"`;
               break;
           }
         } catch {

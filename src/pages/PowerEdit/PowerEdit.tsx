@@ -179,7 +179,7 @@ function FieldTypeIcon({ type }: { type: FieldType }) {
   return <span style={{ fontSize: 11, fontWeight: 700, lineHeight: 1, width: 13, textAlign: 'center', color: 'var(--icon-neutral-medium)', flexShrink: 0 }}>{label}</span>;
 }
 
-function FieldsPanel({ onClose, selectedFields, onSelectedFieldsChange }: { onClose: () => void; selectedFields: string[]; onSelectedFieldsChange: (fields: string[]) => void }) {
+function FieldsPanel({ onClose, selectedFields, onSelectedFieldsChange, anchor }: { onClose: () => void; selectedFields: string[]; onSelectedFieldsChange: (fields: string[]) => void; anchor: DOMRect }) {
   const [activeCategory, setActiveCategory] = useState('Personal');
   const [search, setSearch] = useState('');
   const [dragIdx, setDragIdx] = useState<number | null>(null);
@@ -197,7 +197,7 @@ function FieldsPanel({ onClose, selectedFields, onSelectedFieldsChange }: { onCl
   const sectionHeading = search ? 'Search results' : activeCategory;
 
   return (
-    <div ref={panelRef} style={{ position: 'absolute', top: '100%', left: 0, marginTop: 8, zIndex: 50, background: 'var(--surface-neutral-white)', borderRadius: 16, display: 'flex', flexDirection: 'column', overflow: 'hidden', width: 760, height: 520, boxShadow: '3px 3px 10px 2px rgba(56,49,47,0.10), 1px 1px 0px 1px rgba(56,49,47,0.04)' }}>
+    <div ref={panelRef} style={{ position: 'fixed', top: anchor.bottom + 8, left: anchor.left, zIndex: 9999, background: 'var(--surface-neutral-white)', borderRadius: 16, display: 'flex', flexDirection: 'column', overflow: 'hidden', width: 760, height: 520, boxShadow: '3px 3px 10px 2px rgba(56,49,47,0.10), 1px 1px 0px 1px rgba(56,49,47,0.04)' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 20px 0', flexShrink: 0 }}>
         <BodyText size="large" weight="semibold" color="primary">Fields</BodyText>
@@ -330,10 +330,10 @@ const FILTER_OPERATORS: Record<string, string[]> = {
   default: ['includes', 'excludes', 'is', 'is not'],
 };
 
-function FiltersPanel({ onClose, initialFilterField, filters, onFiltersChange, matchAll, onMatchAllChange, nextIdRef }: {
+function FiltersPanel({ onClose, initialFilterField, filters, onFiltersChange, matchAll, onMatchAllChange, nextIdRef, anchor }: {
   onClose: () => void; initialFilterField?: string | null; filters: FilterRecord[];
   onFiltersChange: (f: FilterRecord[]) => void; matchAll: boolean; onMatchAllChange: (v: boolean) => void;
-  nextIdRef: React.MutableRefObject<number>;
+  nextIdRef: React.MutableRefObject<number>; anchor: DOMRect;
 }) {
   const [matchDropdownOpen, setMatchDropdownOpen] = useState(false);
 
@@ -348,12 +348,10 @@ function FiltersPanel({ onClose, initialFilterField, filters, onFiltersChange, m
   const panelRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     function h(e: MouseEvent) {
-      // Don't close while a Fabric Select menu is open — user is picking a value
       const target = e.target as Node;
-      const hasOpenMenu = document.querySelector('[data-fabric-component="Select"]')?.contains(target)
-        || document.querySelector('[role="menu"]')?.contains(target)
-        || document.querySelector('[role="listbox"]')?.contains(target);
-      if (hasOpenMenu) return;
+      // Don't close when clicking inside a Fabric dropdown menu (portalled outside the panel)
+      const insideFabricMenu = (target as Element).closest?.('.fab-MenuList, .fab-Menu, .fab-SelectToggle');
+      if (insideFabricMenu) return;
       if (panelRef.current && !panelRef.current.contains(target)) onClose();
     }
     document.addEventListener('mousedown', h);
@@ -365,7 +363,7 @@ function FiltersPanel({ onClose, initialFilterField, filters, onFiltersChange, m
   function addFilter() { onFiltersChange([...filters, { id: nextIdRef.current++, field: 'Department', operator: 'is', value: '', dateTo: '' }]); }
 
   return (
-    <div ref={panelRef} style={{ position: 'absolute', top: '100%', left: 0, marginTop: 8, zIndex: 50, background: 'var(--surface-neutral-white)', borderRadius: 16, padding: 20, display: 'flex', flexDirection: 'column', gap: 12, minWidth: 580, boxShadow: '3px 3px 10px 2px rgba(56,49,47,0.10), 1px 1px 0px 1px rgba(56,49,47,0.04)' }}>
+    <div ref={panelRef} style={{ position: 'fixed', top: anchor.bottom + 8, left: anchor.left, zIndex: 9999, background: 'var(--surface-neutral-white)', borderRadius: 16, padding: 20, display: 'flex', flexDirection: 'column', gap: 12, minWidth: 580, boxShadow: '3px 3px 10px 2px rgba(56,49,47,0.10), 1px 1px 0px 1px rgba(56,49,47,0.04)' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <BodyText size="large" weight="semibold" color="primary">Filters</BodyText>
@@ -398,7 +396,6 @@ function FiltersPanel({ onClose, initialFilterField, filters, onFiltersChange, m
             </div>
           )}
         </div>
-        <BodyText size="extra-small" color="neutral-medium">of the following</BodyText>
       </div>
 
       {/* Filter rows */}
@@ -407,33 +404,31 @@ function FiltersPanel({ onClose, initialFilterField, filters, onFiltersChange, m
           const isDate = DATE_FILTER_FIELDS.has(filter.field);
           const operators = FILTER_OPERATORS[isDate ? 'date' : 'default'];
           const valueOptions = FILTER_FIELD_VALUES[filter.field] ?? [];
-          const selectStyle: React.CSSProperties = {
-            height: 32, borderRadius: 8, border: '1px solid #c6c2bf', background: '#fff',
-            color: '#48413f', fontSize: 14, padding: '0 28px 0 12px', cursor: 'pointer',
-            appearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23868180' d='M1.41 0L6 4.59 10.59 0 12 1.42l-6 6-6-6z'/%3E%3C/svg%3E")`,
-            backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center', outline: 'none', boxSizing: 'border-box',
-          };
           return (
             <div key={filter.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               {/* Field selector */}
-              <select
-                value={filter.field}
-                onChange={(e) => {
-                  const newField = e.target.value;
-                  updateFilter(filter.id, { field: newField, operator: FILTER_OPERATORS[DATE_FILTER_FIELDS.has(newField) ? 'date' : 'default'][0], value: '', dateTo: '' });
-                }}
-                style={{ ...selectStyle, flexShrink: 0, width: 148 }}
-              >
-                {FILTER_FIELD_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
-              </select>
+              <div style={{ flexShrink: 0, width: 160 }}>
+                <SelectField
+                  variant="form"
+                  size="small"
+                  value={filter.field}
+                  items={FILTER_FIELD_OPTIONS.map((f) => ({ text: f, value: f }))}
+                  onChange={(e) => {
+                    const newField = e.target.value as string;
+                    updateFilter(filter.id, { field: newField, operator: FILTER_OPERATORS[DATE_FILTER_FIELDS.has(newField) ? 'date' : 'default'][0], value: '', dateTo: '' });
+                  }}
+                />
+              </div>
               {/* Operator selector */}
-              <select
-                value={filter.operator}
-                onChange={(e) => updateFilter(filter.id, { operator: e.target.value })}
-                style={{ ...selectStyle, flexShrink: 0, width: 120 }}
-              >
-                {operators.map((op) => <option key={op} value={op}>{op}</option>)}
-              </select>
+              <div style={{ flexShrink: 0, width: 130 }}>
+                <SelectField
+                  variant="form"
+                  size="small"
+                  value={filter.operator}
+                  items={operators.map((op) => ({ text: op, value: op }))}
+                  onChange={(e) => updateFilter(filter.id, { operator: e.target.value as string })}
+                />
+              </div>
               {/* Value */}
               {isDate ? (
                 <>
@@ -456,20 +451,21 @@ function FiltersPanel({ onClose, initialFilterField, filters, onFiltersChange, m
                   </div>
                 </>
               ) : (
-                <select
-                  value={filter.value}
-                  onChange={(e) => updateFilter(filter.id, { value: e.target.value })}
-                  style={{ ...selectStyle, flexShrink: 0, width: 160 }}
-                >
-                  <option value="">Select...</option>
-                  {valueOptions.map((v) => <option key={v} value={v}>{v}</option>)}
-                </select>
+                <div style={{ flexShrink: 0, width: 170 }}>
+                  <SelectField
+                    variant="form"
+                    size="small"
+                    value={filter.value}
+                    items={[{ text: 'Select...', value: '' }, ...valueOptions.map((v) => ({ text: v, value: v }))]}
+                    onChange={(e) => updateFilter(filter.id, { value: e.target.value as string })}
+                  />
+                </div>
               )}
               {/* Remove */}
               <IconButton
                 icon="trash-can-regular"
                 aria-label="Remove filter"
-                variant="outlined"
+                variant="text"
                 color="secondary"
                 size="small"
                 onClick={() => removeFilter(filter.id)}
@@ -784,9 +780,9 @@ function CellSelect({ colLabel, value, items, onSelect, onClear, onClose }: {
 }
 
 // ─── Effective Date Panel ─────────────────────────────────────────────────────
-function EffectiveDatePanel({ effectiveDate, onDateChange, useIndividualDates, onToggleIndividualDates, onClose }: { effectiveDate: string; onDateChange: (date: string) => void; useIndividualDates: boolean; onToggleIndividualDates: () => void; onClose: () => void }) {
+function EffectiveDatePanel({ effectiveDate, onDateChange, useIndividualDates, onToggleIndividualDates, onClose, anchor }: { effectiveDate: string; onDateChange: (date: string) => void; useIndividualDates: boolean; onToggleIndividualDates: () => void; onClose: () => void; anchor: DOMRect }) {
   return (
-    <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 8, zIndex: 50, background: 'var(--surface-neutral-white)', borderRadius: 'var(--radius-small)', padding: 20, display: 'flex', flexDirection: 'column', gap: 16, width: 300, boxShadow: '3px 3px 10px 2px rgba(56,49,47,0.10), 1px 1px 0px 1px rgba(56,49,47,0.04)' }}>
+    <div style={{ position: 'fixed', top: anchor.bottom + 8, left: anchor.left, zIndex: 9999, background: 'var(--surface-neutral-white)', borderRadius: 'var(--radius-small)', padding: 20, display: 'flex', flexDirection: 'column', gap: 16, width: 300, boxShadow: '3px 3px 10px 2px rgba(56,49,47,0.10), 1px 1px 0px 1px rgba(56,49,47,0.04)' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <BodyText size="large" weight="semibold" color="primary">Effective Date</BodyText>
         <IconButton icon="xmark-solid" aria-label="Close" variant="outlined" color="secondary" size="small" onClick={onClose} />
@@ -1024,14 +1020,12 @@ export function PowerEdit() {
     setTimeout(() => { setDescribeItOpen(false); setDescribeItClosing(false); }, 280);
   }
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [filters, setFilters] = useState<FilterRecord[]>([
-    { id: 1, field: 'Department', operator: 'is', value: '', dateTo: '' },
-    { id: 2, field: 'Employment Type', operator: 'is', value: '', dateTo: '' },
-    { id: 3, field: 'Employment Status', operator: 'is', value: '', dateTo: '' },
-  ]);
+  const [filtersAnchor, setFiltersAnchor] = useState<DOMRect | null>(null);
+  const [filters, setFilters] = useState<FilterRecord[]>([]);
   const [filterMatchAll, setFilterMatchAll] = useState(true);
-  const filterNextId = useRef(4);
+  const filterNextId = useRef(1);
   const [fieldsOpen, setFieldsOpen] = useState(false);
+  const [fieldsAnchor, setFieldsAnchor] = useState<DOMRect | null>(null);
   const [selectedEmployeeType, setSelectedEmployeeType] = useState<string>(location.state?.datasetType ?? 'Employees');
   const [selectedFields, setSelectedFields] = useState<string[]>(sessionName ? ['Name', 'Job Title', 'Manager', 'Hire Date', 'Pay Rate'] : DEFAULT_SELECTED_FIELDS);
   const [editingCell, setEditingCell] = useState<{ id: number; col: ColKey } | null>(null);
@@ -1040,6 +1034,7 @@ export function PowerEdit() {
   const [hoveredHeaderCol, setHoveredHeaderCol] = useState<ColKey | null>(null);
   const [bulkEditCol, setBulkEditCol] = useState<{ key: ColKey; label: string; anchor: DOMRect } | null>(null);
   const [effectivePanelOpen, setEffectivePanelOpen] = useState(false);
+  const [effectivePanelAnchor, setEffectivePanelAnchor] = useState<DOMRect | null>(null);
   const [effectiveDate, setEffectiveDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [useIndividualDates, setUseIndividualDates] = useState(false);
   const [dragColKey, setDragColKey] = useState<ColKey | null>(null);
@@ -1063,11 +1058,6 @@ export function PowerEdit() {
 
   useEffect(() => { if (!hasSelection) { const t = setTimeout(() => setDescribeItOpen(true), 1000); return () => clearTimeout(t); } }, []);
   useEffect(() => { return () => { localStorage.removeItem('bhr-describe-it-open'); }; }, []);
-  useEffect(() => {
-    const el = document.querySelector('.app-layout') as HTMLElement | null;
-    if (el) el.style.marginTop = '36px';
-    return () => { if (el) el.style.marginTop = ''; };
-  }, []);
   useEffect(() => { commitEditRef.current = commitEdit; });
   useEffect(() => {
     if (!editingCell) return;
@@ -1081,7 +1071,11 @@ export function PowerEdit() {
     return () => document.removeEventListener('click', handleClick, true);
   }, [editingCell]);
 
-  const displayEmployees = applyFilters(baseEmployees, filters, filterMatchAll);
+  const displayEmployees = useMemo(
+    () => applyFilters(baseEmployees, filters, filterMatchAll),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [filters, filterMatchAll, baseEmployees.length]
+  );
 
   function startEditing(id: number, col: ColKey, currentValue: string) { setEditingCell({ id, col }); setEditingValue(currentValue); }
   function commitEdit(overrideValue?: string) {
@@ -1110,6 +1104,11 @@ export function PowerEdit() {
       case 'remove_column': setSelectedFields((prev) => prev.filter((f) => FIELD_TO_COL[f]?.key !== (action.col as ColKey))); break;
       case 'reset_column': { const colKey = action.col as ColKey; setEdits((prev) => { const next = { ...prev }; for (const key of Object.keys(next)) { if (key.endsWith(`-${colKey}`)) delete next[key]; } return next; }); break; }
       case 'edit_cell': applyEditCell(action.employeeId, action.col as ColKey, action.value); break;
+      case 'add_filter': {
+        const operator = FILTER_OPERATORS.default.includes(action.operator) ? action.operator : 'is';
+        setFilters((prev) => [...prev, { id: filterNextId.current++, field: action.field, operator, value: action.value, dateTo: '' }]);
+        break;
+      }
     }
   }
 
@@ -1118,15 +1117,15 @@ export function PowerEdit() {
     [selectedFields, baseColumns, useIndividualDates]
   );
   const tableContext: TableContext = { columns: activeCols, employees: displayEmployees.map((e) => ({ id: e.id, data: Object.fromEntries(activeCols.map((col) => [col.label, edits[`${e.id}-${col.key}`]?.current ?? getOriginalValue(e, col.key, effectiveDate)])) })) };
-  const sortedEmployees = sortCol ? [...displayEmployees].sort((a, b) => {
+  const sortedEmployees = useMemo(() => sortCol ? [...displayEmployees].sort((a, b) => {
     if (sortCol === 'salary') { const diff = a.salary - b.salary; return sortDir === 'asc' ? diff : -diff; }
     let av = getOriginalValue(a, sortCol, effectiveDate); let bv = getOriginalValue(b, sortCol, effectiveDate);
     if (sortCol === 'hireDate') { av = parseMDYToISO(av); bv = parseMDYToISO(bv); }
     const cmp = av.localeCompare(bv); return sortDir === 'asc' ? cmp : -cmp;
-  }) : displayEmployees;
+  }) : displayEmployees, [displayEmployees, sortCol, sortDir, effectiveDate]);
 
   const configuredFilters = filters.filter((f) => f.value || f.dateTo);
-  const [version, setVersion] = useState<1 | 2>(1);
+  const [version, setVersion] = useState<1 | 2>(2);
 
   // ── V2 DataGrid helpers ──────────────────────────────────────────────────────
   function buildRows(): EmployeeRow[] {
@@ -1175,14 +1174,8 @@ export function PowerEdit() {
           if (!edit) return null;
           return {
             status: 'info' as const,
-            title: 'Value changed',
             message: (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <BodyText size="extra-small" color="neutral-weak">Original: {edit.original}</BodyText>
-                <TextButton size="small" onClick={() => {
-                  setEdits((prev) => { const next = { ...prev }; delete next[editKey]; return next; });
-                }}>Revert</TextButton>
-              </div>
+              <BodyText size="extra-small" color="neutral-inverted">Original: {edit.original}</BodyText>
             ),
           };
         },
@@ -1211,21 +1204,13 @@ export function PowerEdit() {
 
   return (
     <>
-    {createPortal(
-      <div className="pe-version-bar">
-        <span className="pe-version-bar__label">Prototype</span>
-        <button className={`pe-version-btn${version === 1 ? ' pe-version-btn--active' : ''}`} onClick={() => setVersion(1)}>Version 1</button>
-        <button className={`pe-version-btn${version === 2 ? ' pe-version-btn--active' : ''}`} onClick={() => setVersion(2)}>Version 2</button>
-      </div>,
-      document.body
-    )}
     <div style={{ display: 'flex', flex: 1, minWidth: 0, gap: '12px', minHeight: 0 }}>
       {/* Main content column — white rounded card matching PageCapsule visual */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden', background: 'var(--surface-neutral-white)', borderRadius: 20, margin: '0 0 24px 0' }}>
       <div ref={scrollContainerRef} onScroll={handleContentScroll} style={{ flex: 1, overflowY: 'auto', padding: '32px 32px 32px 32px', background: 'var(--surface-neutral-xx-weak)' }}>
         {/* Back */}
         <div style={{ marginBottom: 12 }}>
-          <TextButton size="small" color="secondary" onClick={() => navigate('/people/power-edit')}>
+          <TextButton size="small" color="secondary" onClick={() => navigate('/people')}>
             <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <IconV2 name="chevron-left-solid" size={14} />
               Back
@@ -1235,31 +1220,13 @@ export function PowerEdit() {
 
         {/* Title */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-          {titleEditing ? (
-            <div style={{ flex: 1, maxWidth: 640 }}>
-              <TextField
-                autoFocus
-                value={editTitle}
-                onChange={(e) => { setEditTitle((e.target as HTMLInputElement).value); if ((e.target as HTMLInputElement).value.trim()) setTitleError(false); }}
-                placeholder="Name your edit..."
-                status={titleError ? 'error' : undefined}
-                onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-                onBlur={() => { if (editTitle.trim()) setTitleEditing(false); }}
-                width={100}
-              />
-            </div>
-          ) : (
-            <h1 onClick={() => { if (!isReadonly) setTitleEditing(true); }} style={{ fontFamily: 'Fields, system-ui, sans-serif', fontSize: 40, fontWeight: 700, lineHeight: '48px', color: editTitle ? 'var(--color-primary-strong)' : 'var(--text-neutral-weak)', cursor: isReadonly ? 'default' : 'text', margin: 0 }}>
-              {editTitle || 'Name your edit...'}
-            </h1>
-          )}
-          <Pill muted type={isReadonly ? PillType.Success : PillType.Neutral}>
-            {isReadonly ? 'Published' : 'Draft'}
-          </Pill>
+          <h1 style={{ fontFamily: 'Fields, system-ui, sans-serif', fontSize: 40, fontWeight: 700, lineHeight: '48px', color: 'var(--color-primary-strong)', margin: 0 }}>
+            Power Edit
+          </h1>
         </div>
 
         {/* Toolbar */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {/* Power Edit Assistant — AI outlined button */}
           <Button
@@ -1296,49 +1263,61 @@ export function PowerEdit() {
             >
               {selectedEmployeeType}
             </Dropdown>
-            <div style={{ position: 'relative' }}>
+            <div>
               <Button
                 variant="outlined"
                 color="secondary"
                 size="medium"
                 startIcon={<IconV2 name="table-columns-regular" size={16} />}
                 endIcon={<IconV2 name="caret-down-solid" size={10} />}
-                onClick={() => setFieldsOpen((v) => !v)}
+                onClick={(e) => {
+                  if (fieldsOpen) { setFieldsOpen(false); return; }
+                  setFiltersOpen(false); setEffectivePanelOpen(false);
+                  setFieldsAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());
+                  setFieldsOpen(true);
+                }}
               >
                 {selectedFields.length > 0 ? `Fields (${selectedFields.length})` : 'Fields'}
               </Button>
-              {fieldsOpen && <FieldsPanel onClose={() => setFieldsOpen(false)} selectedFields={selectedFields} onSelectedFieldsChange={setSelectedFields} />}
             </div>
           </ButtonGroup>
 
           {/* Filters — dropdown button */}
-          <div style={{ position: 'relative' }}>
+          <div>
             <Button
               variant="outlined"
               color="secondary"
               size="medium"
               startIcon={<IconV2 name="sliders-regular" size={16} />}
               endIcon={<IconV2 name="caret-down-solid" size={10} />}
-              onClick={() => setFiltersOpen((v) => !v)}
+              onClick={(e) => {
+                if (filtersOpen) { setFiltersOpen(false); return; }
+                setFieldsOpen(false); setEffectivePanelOpen(false);
+                setFiltersAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());
+                setFiltersOpen(true);
+              }}
             >
               {configuredFilters.length > 0 ? `Filters (${configuredFilters.length})` : 'Filters'}
             </Button>
-            {filtersOpen && <FiltersPanel onClose={() => { setFiltersOpen(false); setPendingFilterField(null); }} initialFilterField={pendingFilterField} filters={filters} onFiltersChange={setFilters} matchAll={filterMatchAll} onMatchAllChange={setFilterMatchAll} nextIdRef={filterNextId} />}
           </div>
 
           {/* Effective Date — dropdown button, turns primary when custom dates are active */}
-          <div style={{ position: 'relative' }}>
+          <div>
             <Button
               variant="outlined"
               color={useIndividualDates ? 'primary' : 'secondary'}
               size="medium"
               startIcon={<IconV2 name="calendar-regular" size={16} />}
               endIcon={<IconV2 name="caret-down-solid" size={10} />}
-              onClick={() => setEffectivePanelOpen((v) => !v)}
+              onClick={(e) => {
+                if (effectivePanelOpen) { setEffectivePanelOpen(false); return; }
+                setFieldsOpen(false); setFiltersOpen(false);
+                setEffectivePanelAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());
+                setEffectivePanelOpen(true);
+              }}
             >
               Effective Date ({useIndividualDates ? 'Custom' : formatEffectiveDateLabel(effectiveDate)})
             </Button>
-            {effectivePanelOpen && <EffectiveDatePanel effectiveDate={effectiveDate} onDateChange={setEffectiveDate} useIndividualDates={useIndividualDates} onToggleIndividualDates={() => setUseIndividualDates((v) => !v)} onClose={() => setEffectivePanelOpen(false)} />}
           </div>
           </div>{/* end left toolbar group */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1347,6 +1326,20 @@ export function PowerEdit() {
             ))}
           </div>
         </div>
+
+        {/* Toolbar panel portals */}
+        {fieldsOpen && fieldsAnchor && createPortal(
+          <FieldsPanel anchor={fieldsAnchor} onClose={() => setFieldsOpen(false)} selectedFields={selectedFields} onSelectedFieldsChange={setSelectedFields} />,
+          document.body
+        )}
+        {filtersOpen && filtersAnchor && createPortal(
+          <FiltersPanel anchor={filtersAnchor} onClose={() => { setFiltersOpen(false); setPendingFilterField(null); }} initialFilterField={pendingFilterField} filters={filters} onFiltersChange={setFilters} matchAll={filterMatchAll} onMatchAllChange={setFilterMatchAll} nextIdRef={filterNextId} />,
+          document.body
+        )}
+        {effectivePanelOpen && effectivePanelAnchor && createPortal(
+          <EffectiveDatePanel anchor={effectivePanelAnchor} effectiveDate={effectiveDate} onDateChange={setEffectiveDate} useIndividualDates={useIndividualDates} onToggleIndividualDates={() => setUseIndividualDates((v) => !v)} onClose={() => setEffectivePanelOpen(false)} />,
+          document.body
+        )}
 
         {/* Table or blank state */}
         {sortedEmployees.length === 0 ? (
@@ -1369,7 +1362,7 @@ export function PowerEdit() {
             </div>
           </Section>
         ) : version === 2 ? (
-          <Section ariaLabel="Edit table" paddingTop="20px">
+          <Section ariaLabel="Edit table">
             <DataGrid
               ref={dataGridRef}
               columnDefs={colDefs}
@@ -1553,7 +1546,7 @@ export function PowerEdit() {
         <ColumnHeaderMenu anchor={openHeaderMenuCol.anchor}
           onSortAsc={() => { setSortCol(openHeaderMenuCol.key); setSortDir('asc'); }}
           onSortDesc={() => { setSortCol(openHeaderMenuCol.key); setSortDir('desc'); }}
-          onAddFilter={() => { const ff = COL_TO_FILTER_FIELD[openHeaderMenuCol.key] ?? FILTER_FIELD_OPTIONS[0]; setPendingFilterField(ff); setFiltersOpen(true); }}
+          onAddFilter={() => { const ff = COL_TO_FILTER_FIELD[openHeaderMenuCol.key] ?? FILTER_FIELD_OPTIONS[0]; setPendingFilterField(ff); setFiltersAnchor(openHeaderMenuCol.anchor); setFiltersOpen(true); }}
           onBulkEdit={() => setBulkEditCol({ key: openHeaderMenuCol.key, label: openHeaderMenuCol.label, anchor: openHeaderMenuCol.anchor })}
           onResetChanges={() => { const colKey = openHeaderMenuCol.key; setEdits((prev) => { const next = { ...prev }; for (const key of Object.keys(next)) { if (key.endsWith(`-${colKey}`)) delete next[key]; } return next; }); }}
           onRemove={() => { const colKey = openHeaderMenuCol.key; setSelectedFields((prev) => prev.filter((f) => FIELD_TO_COL[f]?.key !== colKey)); }}
@@ -1577,12 +1570,8 @@ export function PowerEdit() {
           <ActionFooter
             actions={[
               <Button key="publish" variant="contained" color="primary" size="medium"
-                onClick={() => { if (!editTitle.trim()) { setTitleError(true); setTitleEditing(true); showSlidedown('Give your edit a name before publishing.', SLIDEDOWN_TYPES.error); return; } navigate('/people/power-edit', { state: { toast: 'published', sessionName: editTitle, activeTab: 'completed' } }); }}>
+                onClick={() => navigate('/people', { state: { toast: 'published' } })}>
                 Publish Changes
-              </Button>,
-              <Button key="save" variant="outlined" color="secondary" size="medium"
-                onClick={() => { if (!editTitle.trim()) { setTitleError(true); setTitleEditing(true); showSlidedown('Give your edit a name before saving.', SLIDEDOWN_TYPES.error); return; } navigate('/people/power-edit', { state: { toast: 'draft', sessionName: editTitle, activeTab: 'draft' } }); }}>
-                Save &amp; Finish Later
               </Button>,
               <TextButton key="cancel" size="medium" onClick={() => setCancelConfirmOpen(true)}>Cancel</TextButton>,
             ]}
@@ -1593,14 +1582,13 @@ export function PowerEdit() {
       {/* Cancel confirmation modal */}
       <StandardModal isOpen={cancelConfirmOpen} onRequestClose={() => setCancelConfirmOpen(false)}>
         <StandardModal.Body
-          renderHeader={<StandardModal.Header title="Just checking..." />}
+          renderHeader={<StandardModal.Header title="Discard changes?" />}
           renderFooter={
             <StandardModal.Footer
               actions={[
-                <TextButton key="discard" onClick={() => navigate('/people/power-edit')}>Delete these edits</TextButton>,
-                <Button key="save" variant="contained" color="primary"
-                  onClick={() => { if (!editTitle.trim()) { setCancelConfirmOpen(false); setTitleError(true); setTitleEditing(true); showSlidedown('Give your edit a name before saving.', SLIDEDOWN_TYPES.error); return; } navigate('/people/power-edit', { state: { toast: 'draft', sessionName: editTitle, activeTab: 'draft' } }); }}>
-                  Save &amp; Finish Later
+                <TextButton key="discard" onClick={() => navigate('/people')}>Discard changes</TextButton>,
+                <Button key="stay" variant="contained" color="primary" onClick={() => setCancelConfirmOpen(false)}>
+                  Keep editing
                 </Button>,
               ]}
             />
@@ -1609,8 +1597,8 @@ export function PowerEdit() {
           <StandardModal.UpperContent>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 12, padding: '24px 0 16px', width: '100%' }}>
               <IconTile icon={<IconV2 name="triangle-exclamation-regular" color="warning-strong" size={24} />} size={56} variant="muted" />
-              <Headline size="small" component="h4" color="neutral-strong">You still have some unsaved changes...</Headline>
-              <BodyText size="medium" color="neutral-weak">You'll lose those changes if you continue and leave.</BodyText>
+              <Headline size="small" component="h4" color="neutral-strong">Your changes haven't been published</Headline>
+              <BodyText size="medium" color="neutral-weak">If you leave now, all of your edits will be lost and cannot be recovered.</BodyText>
             </div>
           </StandardModal.UpperContent>
         </StandardModal.Body>

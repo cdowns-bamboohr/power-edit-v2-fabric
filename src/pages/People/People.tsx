@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, type ChangeEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   IconV2,
   Headline,
@@ -11,6 +11,8 @@ import {
   Tab,
   TextField,
   SelectField,
+  SlidedownPortal,
+  SLIDEDOWN_TYPES,
 } from '@bamboohr/fabric';
 import { EmployeeCard } from '../../components/EmployeeCard';
 import { PeopleListView } from '../../components/PeopleListView';
@@ -27,7 +29,17 @@ interface PeopleProps {
 
 export function People({ defaultTab = 'list' }: PeopleProps) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [viewMode, setViewMode] = useState<ViewMode>(defaultTab);
+  const [toastVisible, setToastVisible] = useState(false);
+
+  useEffect(() => {
+    if (location.state?.toast === 'published') {
+      setToastVisible(true);
+      setTimeout(() => setToastVisible(false), 5000);
+      window.history.replaceState({}, '');
+    }
+  }, []);
   const [searchQuery, setSearchQuery] = useState('');
   const [groupBy, setGroupBy] = useState<GroupBy>('name');
   const [filterDepartment, setFilterDepartment] = useState('all');
@@ -83,6 +95,12 @@ export function People({ defaultTab = 'list' }: PeopleProps) {
 
   return (
     <div className="people-page">
+      <SlidedownPortal
+        show={toastVisible}
+        message="Changes published successfully."
+        type={SLIDEDOWN_TYPES.success}
+        onDismiss={() => setToastVisible(false)}
+      />
       {/* Page Header */}
       <div className="people-header">
         <Headline size="large" color="primary" weight="bold">People</Headline>
@@ -113,7 +131,7 @@ export function People({ defaultTab = 'list' }: PeopleProps) {
             size="medium"
             className="people-primary-btn"
             startIcon={<IconV2 name="bolt-regular" size={16} />}
-            onClick={() => navigate('/people/power-edit')}
+            onClick={() => navigate('/people/power-edit/edit')}
           >
             Power Edit
           </Button>
