@@ -12,7 +12,8 @@ export type PowerEditAction =
   | { type: 'remove_column'; col: string }
   | { type: 'reset_column'; col: string }
   | { type: 'edit_cell'; employeeId: number; col: string; value: string }
-  | { type: 'add_filter'; field: string; operator: string; value: string };
+  | { type: 'add_filter'; field: string; operator: string; value: string }
+  | { type: 'set_edit_mode'; mode: 'new-row' | 'correction'; date: string };
 
 export interface TableContext {
   columns: { key: string; label: string }[];
@@ -139,6 +140,28 @@ const TOOLS = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'set_edit_mode',
+      description: 'Switch the edit mode to "new-row" (adding a new effective-dated record) or "correction" (fixing an existing record at a specific point in time), and set the associated date.',
+      parameters: {
+        type: 'object',
+        properties: {
+          mode: {
+            type: 'string',
+            enum: ['new-row', 'correction'],
+            description: '"new-row" for a new effective-dated record, "correction" for fixing an existing record.',
+          },
+          date: {
+            type: 'string',
+            description: 'The effective or correction date in YYYY-MM-DD format.',
+          },
+        },
+        required: ['mode', 'date'],
+      },
+    },
+  },
 ];
 
 // ─── System prompt ────────────────────────────────────────────────────────────
@@ -175,7 +198,8 @@ Guidelines:
 - Be concise — one or two sentences after applying changes is enough.
 - If the user's request is ambiguous, ask a quick clarifying question before acting.
 - If you need to edit multiple employees individually, call edit_cell for each one.
-- Use add_filter to narrow the employee list when the user says things like "show only Product", "pull in everyone from Engineering", or "filter to full-time employees". The filter immediately updates which employees are visible in the table.`;
+- Use add_filter to narrow the employee list when the user says things like "show only Product", "pull in everyone from Engineering", or "filter to full-time employees". The filter immediately updates which employees are visible in the table.
+- Use set_edit_mode when the user wants to make a correction (e.g. "I need to correct data as of March 1st", "make a correction for last quarter") — set mode to "correction" and the relevant date. Use mode "new-row" when they want to add a new effective-dated record going forward.`;
 }
 
 // ─── API call ─────────────────────────────────────────────────────────────────
@@ -271,6 +295,10 @@ export async function sendMessage(
             case 'add_filter':
               collectedActions.push({ type: 'add_filter', field: args.field, operator: args.operator, value: args.value });
               result = `Added filter: ${args.field} ${args.operator} "${args.value}"`;
+              break;
+            case 'set_edit_mode':
+              collectedActions.push({ type: 'set_edit_mode', mode: args.mode, date: args.date });
+              result = `Set edit mode to "${args.mode}" with date ${args.date}`;
               break;
           }
         } catch {

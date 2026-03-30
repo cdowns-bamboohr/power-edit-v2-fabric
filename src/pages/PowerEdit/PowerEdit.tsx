@@ -322,7 +322,7 @@ const EMPLOYEE_OPTIONS = [
 
 
 // ─── Filters Panel ────────────────────────────────────────────────────────────
-type FilterRecord = { id: number; field: string; operator: string; value: string; dateTo: string };
+type FilterRecord = { id: number; field: string; operator: string; value: string | string[]; dateTo: string };
 const FILTER_FIELD_OPTIONS = ['Department', 'Location', 'Division', 'Employment Type', 'Employment Status', 'Job Title', 'Hire Date', 'Birth Date', 'Gender', 'Ethnicity'];
 const DATE_FILTER_FIELDS = new Set(['Hire Date', 'Birth Date']);
 const FILTER_OPERATORS: Record<string, string[]> = {
@@ -340,7 +340,7 @@ function FiltersPanel({ onClose, initialFilterField, filters, onFiltersChange, m
   useEffect(() => {
     if (initialFilterField) {
       const isDate = DATE_FILTER_FIELDS.has(initialFilterField);
-      onFiltersChange([...filters, { id: nextIdRef.current++, field: initialFilterField, operator: FILTER_OPERATORS[isDate ? 'date' : 'default'][0], value: '', dateTo: '' }]);
+      onFiltersChange([...filters, { id: nextIdRef.current++, field: initialFilterField, operator: FILTER_OPERATORS[isDate ? 'date' : 'default'][0], value: isDate ? '' : [], dateTo: '' }]);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -360,7 +360,7 @@ function FiltersPanel({ onClose, initialFilterField, filters, onFiltersChange, m
 
   function updateFilter(id: number, patch: Partial<FilterRecord>) { onFiltersChange(filters.map((f) => (f.id === id ? { ...f, ...patch } : f))); }
   function removeFilter(id: number) { onFiltersChange(filters.filter((f) => f.id !== id)); }
-  function addFilter() { onFiltersChange([...filters, { id: nextIdRef.current++, field: 'Department', operator: 'is', value: '', dateTo: '' }]); }
+  function addFilter() { onFiltersChange([...filters, { id: nextIdRef.current++, field: 'Department', operator: 'is', value: [], dateTo: '' }]); }
 
   return (
     <div ref={panelRef} style={{ position: 'fixed', top: anchor.bottom + 8, left: anchor.left, zIndex: 9999, background: 'var(--surface-neutral-white)', borderRadius: 16, padding: 20, display: 'flex', flexDirection: 'column', gap: 12, minWidth: 580, boxShadow: '3px 3px 10px 2px rgba(56,49,47,0.10), 1px 1px 0px 1px rgba(56,49,47,0.04)' }}>
@@ -434,7 +434,7 @@ function FiltersPanel({ onClose, initialFilterField, filters, onFiltersChange, m
                 <>
                   <div style={{ flexShrink: 0, width: 140 }}>
                     <DatePicker
-                      value={filter.value || undefined}
+                      value={(filter.value as string) || undefined}
                       onChange={({ value }) => updateFilter(filter.id, { value: value ?? '' })}
                       size="small"
                       width={100}
@@ -455,9 +455,10 @@ function FiltersPanel({ onClose, initialFilterField, filters, onFiltersChange, m
                   <SelectField
                     variant="form"
                     size="small"
-                    value={filter.value}
-                    items={[{ text: 'Select...', value: '' }, ...valueOptions.map((v) => ({ text: v, value: v }))]}
-                    onChange={(e) => updateFilter(filter.id, { value: e.target.value as string })}
+                    canSelectMultiple
+                    value={Array.isArray(filter.value) ? filter.value : (filter.value ? [filter.value] : [])}
+                    items={valueOptions.map((v) => ({ text: v, value: v }))}
+                    onChange={(e) => updateFilter(filter.id, { value: e.target.value as string[] })}
                   />
                 </div>
               )}
@@ -779,6 +780,64 @@ function CellSelect({ colLabel, value, items, onSelect, onClear, onClose }: {
   );
 }
 
+// ─── Edit Mode Select Panel ───────────────────────────────────────────────────
+type EditMode = 'new-row' | 'correction';
+
+function EditModePanel({ anchor, mode, onSelect, onClose }: { anchor: DOMRect; mode: EditMode; onSelect: (m: EditMode) => void; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function h(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); }
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [onClose]);
+  const options: { value: EditMode; icon: string; label: string; description: string }[] = [
+    { value: 'new-row', icon: 'circle-plus-regular', label: 'New Row', description: 'Adds a new effective-dated record to the employee\'s history.' },
+    { value: 'correction', icon: 'clock-rotate-left-regular', label: 'Correction', description: 'Fix an existing data row by stepping back to a specific point in time.' },
+  ];
+  return (
+    <div ref={ref} style={{ position: 'fixed', top: anchor.bottom + 8, left: anchor.left, zIndex: 9999, background: 'var(--surface-neutral-white)', borderRadius: 'var(--radius-small)', padding: 8, display: 'flex', flexDirection: 'column', gap: 4, width: 264, boxShadow: '3px 3px 10px 2px rgba(56,49,47,0.10), 1px 1px 0px 1px rgba(56,49,47,0.04)' }}>
+      {options.map((opt) => {
+        const isActive = mode === opt.value;
+        return (
+          <button
+            key={opt.value}
+            onClick={() => { onSelect(opt.value); onClose(); }}
+            style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 12px', border: 'none', borderRadius: 8, cursor: 'pointer', background: isActive ? 'var(--surface-primary-weak)' : 'transparent', textAlign: 'left', width: '100%' }}
+            onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.background = 'var(--surface-neutral-xx-weak)'; }}
+            onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+          >
+            <span style={{ marginTop: 2, color: isActive ? 'var(--icon-primary-strong)' : 'var(--icon-neutral-medium)', flexShrink: 0 }}>
+              <IconV2 name={opt.icon as any} size={16} />
+            </span>
+            <div>
+              <BodyText size="small" weight="medium" color="neutral-strong">{opt.label}</BodyText>
+              <BodyText size="extra-small" color="neutral-weak">{opt.description}</BodyText>
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Correction Date Panel ────────────────────────────────────────────────────
+function CorrectionDatePanel({ correctionDate, onDateChange, onClose, anchor }: { correctionDate: string; onDateChange: (date: string) => void; onClose: () => void; anchor: DOMRect }) {
+  return (
+    <div style={{ position: 'fixed', top: anchor.bottom + 8, left: anchor.left, zIndex: 9999, background: 'var(--surface-neutral-white)', borderRadius: 'var(--radius-small)', padding: 20, display: 'flex', flexDirection: 'column', gap: 16, width: 300, boxShadow: '3px 3px 10px 2px rgba(56,49,47,0.10), 1px 1px 0px 1px rgba(56,49,47,0.04)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <BodyText size="large" weight="semibold" color="primary">Point in Time</BodyText>
+        <IconButton icon="xmark-solid" aria-label="Close" variant="outlined" color="secondary" size="small" onClick={onClose} />
+      </div>
+      <DatePicker
+        label="Date"
+        value={correctionDate}
+        onChange={({ value }) => { if (value) onDateChange(value); }}
+        width={100}
+      />
+    </div>
+  );
+}
+
 // ─── Effective Date Panel ─────────────────────────────────────────────────────
 function EffectiveDatePanel({ effectiveDate, onDateChange, useIndividualDates, onToggleIndividualDates, onClose, anchor }: { effectiveDate: string; onDateChange: (date: string) => void; useIndividualDates: boolean; onToggleIndividualDates: () => void; onClose: () => void; anchor: DOMRect }) {
   return (
@@ -815,7 +874,7 @@ function EffectiveDatePanel({ effectiveDate, onDateChange, useIndividualDates, o
 }
 
 // ─── Column Header Menu ───────────────────────────────────────────────────────
-function ColumnHeaderMenu({ anchor, onSortAsc, onSortDesc, onAddFilter, onBulkEdit, onResetChanges, onRemove, onClose }: { anchor: DOMRect; onSortAsc: () => void; onSortDesc: () => void; onAddFilter: () => void; onBulkEdit: () => void; onResetChanges: () => void; onRemove: () => void; onClose: () => void }) {
+function ColumnHeaderMenu({ anchor, onSortAsc, onSortDesc, onAddFilter, onBulkEdit, onResetChanges, onRemove, onClose, resetDisabled }: { anchor: DOMRect; onSortAsc: () => void; onSortDesc: () => void; onAddFilter: () => void; onBulkEdit: () => void; onResetChanges: () => void; onRemove: () => void; onClose: () => void; resetDisabled: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     function h(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); }
@@ -829,7 +888,7 @@ function ColumnHeaderMenu({ anchor, onSortAsc, onSortDesc, onAddFilter, onBulkEd
     null,
     { icon: 'sliders-regular', label: 'Edit Filter', action: () => { onAddFilter(); onClose(); } },
     { icon: 'pen-regular', label: 'Bulk Edit Column', action: () => { onBulkEdit(); onClose(); } },
-    { icon: 'arrow-rotate-left-regular', label: 'Reset Changes', action: () => { onResetChanges(); onClose(); } },
+    ...(!resetDisabled ? [{ icon: 'arrow-rotate-left-regular', label: 'Reset Changes', action: () => { onResetChanges(); onClose(); } } as const] : []),
     null,
     { icon: 'circle-xmark-regular', label: 'Remove', action: () => { onRemove(); onClose(); }, danger: true },
   ];
@@ -927,19 +986,20 @@ const FILTER_FIELD_TO_PROP: Record<string, (e: Employee) => string> = {
 };
 
 function applyFilters(emps: Employee[], filters: FilterRecord[], matchAll: boolean): Employee[] {
-  const configured = filters.filter((f) => f.value || f.dateTo);
+  const configured = filters.filter((f) => (Array.isArray(f.value) ? f.value.length > 0 : f.value) || f.dateTo);
   if (configured.length === 0) return emps;
   return emps.filter((emp) => {
     const results = configured.map((filter) => {
       const getProp = FILTER_FIELD_TO_PROP[filter.field];
       if (!getProp) return true;
       const empVal = getProp(emp).toLowerCase();
-      const filterVal = filter.value.toLowerCase();
+      const filterValues = Array.isArray(filter.value) ? filter.value : [filter.value];
+      const filterVal = filterValues[0]?.toLowerCase() ?? '';
       switch (filter.operator) {
         case 'includes': return empVal.includes(filterVal);
         case 'excludes': return !empVal.includes(filterVal);
-        case 'is': return empVal === filterVal;
-        case 'is not': return empVal !== filterVal;
+        case 'is': return filterValues.some((v) => empVal === v.toLowerCase());
+        case 'is not': return filterValues.every((v) => empVal !== v.toLowerCase());
         case 'is before': return filter.value ? empVal < filter.value : true;
         case 'is after': return filter.value ? empVal > filter.value : true;
         case 'is on': return empVal === filter.value;
@@ -1037,6 +1097,9 @@ export function PowerEdit() {
   const [effectivePanelAnchor, setEffectivePanelAnchor] = useState<DOMRect | null>(null);
   const [effectiveDate, setEffectiveDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [useIndividualDates, setUseIndividualDates] = useState(false);
+  const [editMode, setEditMode] = useState<EditMode>('new-row');
+  const [modePanelOpen, setModePanelOpen] = useState(false);
+  const [modePanelAnchor, setModePanelAnchor] = useState<DOMRect | null>(null);
   const [dragColKey, setDragColKey] = useState<ColKey | null>(null);
   const [overColKey, setOverColKey] = useState<ColKey | null>(null);
   const [openHeaderMenuCol, setOpenHeaderMenuCol] = useState<{ key: ColKey; label: string; anchor: DOMRect } | null>(null);
@@ -1105,7 +1168,12 @@ export function PowerEdit() {
       case 'edit_cell': applyEditCell(action.employeeId, action.col as ColKey, action.value); break;
       case 'add_filter': {
         const operator = FILTER_OPERATORS.default.includes(action.operator) ? action.operator : 'is';
-        setFilters((prev) => [...prev, { id: filterNextId.current++, field: action.field, operator, value: action.value, dateTo: '' }]);
+        setFilters((prev) => [...prev, { id: filterNextId.current++, field: action.field, operator, value: [action.value], dateTo: '' }]);
+        break;
+      }
+      case 'set_edit_mode': {
+        setEditMode(action.mode);
+        if (action.date) setEffectiveDate(action.date);
         break;
       }
     }
@@ -1123,7 +1191,7 @@ export function PowerEdit() {
     const cmp = av.localeCompare(bv); return sortDir === 'asc' ? cmp : -cmp;
   }) : displayEmployees, [displayEmployees, sortCol, sortDir, effectiveDate]);
 
-  const configuredFilters = filters.filter((f) => f.value || f.dateTo);
+  const configuredFilters = filters.filter((f) => (Array.isArray(f.value) ? f.value.length > 0 : f.value) || f.dateTo);
   const [version, setVersion] = useState<1 | 2>(2);
 
   // ── V2 DataGrid helpers ──────────────────────────────────────────────────────
@@ -1277,24 +1345,37 @@ export function PowerEdit() {
             {selectedFields.length > 0 ? `Fields (${selectedFields.length})` : 'Fields'}
           </Button>
 
-          {/* Effective Date — dropdown button, turns primary when custom dates are active */}
-          <div>
+          {/* Edit Mode + Effective/Correction Date — connected button group */}
+          <ButtonGroup variant="outlined" color={useIndividualDates || editMode === 'correction' ? 'primary' : 'secondary'} size="medium">
+            {/* Mode selector button */}
             <Button
-              variant="outlined"
-              color={useIndividualDates ? 'primary' : 'secondary'}
-              size="medium"
-              startIcon={<IconV2 name="calendar-regular" size={16} />}
+              startIcon={<IconV2 name={editMode === 'new-row' ? 'circle-plus-regular' : 'clock-rotate-left-regular'} size={16} />}
+              endIcon={<IconV2 name="caret-down-solid" size={10} />}
+              onClick={(e) => {
+                if (modePanelOpen) { setModePanelOpen(false); return; }
+                setFieldsOpen(false); setFiltersOpen(false); setEffectivePanelOpen(false);
+                setModePanelAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());
+                setModePanelOpen(true);
+              }}
+            >
+              {editMode === 'new-row' ? 'New Row' : 'Correction'}
+            </Button>
+            {/* Date selector button */}
+            <Button
+              startIcon={<IconV2 name={editMode === 'new-row' ? 'calendar-regular' : 'calendar-clock-regular'} size={16} />}
               endIcon={<IconV2 name="caret-down-solid" size={10} />}
               onClick={(e) => {
                 if (effectivePanelOpen) { setEffectivePanelOpen(false); return; }
-                setFieldsOpen(false); setFiltersOpen(false);
+                setFieldsOpen(false); setFiltersOpen(false); setModePanelOpen(false);
                 setEffectivePanelAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());
                 setEffectivePanelOpen(true);
               }}
             >
-              Effective Date ({useIndividualDates ? 'Custom' : formatEffectiveDateLabel(effectiveDate)})
+              {editMode === 'new-row'
+                ? `Effective Date (${useIndividualDates ? 'Custom' : formatEffectiveDateLabel(effectiveDate)})`
+                : `Point in Time (${formatEffectiveDateLabel(effectiveDate)})`}
             </Button>
-          </div>
+          </ButtonGroup>
           </div>{/* end left toolbar group */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <IconButton icon="arrow-down-to-line-regular" aria-label="Export" variant="outlined" color="secondary" size="medium" />
@@ -1310,8 +1391,16 @@ export function PowerEdit() {
           <FiltersPanel anchor={filtersAnchor} onClose={() => { setFiltersOpen(false); setPendingFilterField(null); }} initialFilterField={pendingFilterField} filters={filters} onFiltersChange={setFilters} matchAll={filterMatchAll} onMatchAllChange={setFilterMatchAll} nextIdRef={filterNextId} />,
           document.body
         )}
-        {effectivePanelOpen && effectivePanelAnchor && createPortal(
+        {effectivePanelOpen && effectivePanelAnchor && editMode === 'new-row' && createPortal(
           <EffectiveDatePanel anchor={effectivePanelAnchor} effectiveDate={effectiveDate} onDateChange={setEffectiveDate} useIndividualDates={useIndividualDates} onToggleIndividualDates={() => setUseIndividualDates((v) => !v)} onClose={() => setEffectivePanelOpen(false)} />,
+          document.body
+        )}
+        {effectivePanelOpen && effectivePanelAnchor && editMode === 'correction' && createPortal(
+          <CorrectionDatePanel anchor={effectivePanelAnchor} correctionDate={effectiveDate} onDateChange={setEffectiveDate} onClose={() => setEffectivePanelOpen(false)} />,
+          document.body
+        )}
+        {modePanelOpen && modePanelAnchor && createPortal(
+          <EditModePanel anchor={modePanelAnchor} mode={editMode} onSelect={setEditMode} onClose={() => setModePanelOpen(false)} />,
           document.body
         )}
 
@@ -1524,7 +1613,8 @@ export function PowerEdit() {
           onBulkEdit={() => setBulkEditCol({ key: openHeaderMenuCol.key, label: openHeaderMenuCol.label, anchor: openHeaderMenuCol.anchor })}
           onResetChanges={() => { const colKey = openHeaderMenuCol.key; setEdits((prev) => { const next = { ...prev }; for (const key of Object.keys(next)) { if (key.endsWith(`-${colKey}`)) delete next[key]; } return next; }); }}
           onRemove={() => { const colKey = openHeaderMenuCol.key; setSelectedFields((prev) => prev.filter((f) => FIELD_TO_COL[f]?.key !== colKey)); }}
-          onClose={() => setOpenHeaderMenuCol(null)} />
+          onClose={() => setOpenHeaderMenuCol(null)}
+          resetDisabled={!Object.keys(edits).some((k) => k.endsWith(`-${openHeaderMenuCol.key}`))} />
       )}
 
 

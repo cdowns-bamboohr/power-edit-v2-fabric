@@ -6,6 +6,7 @@
   padding: 32px 0;
   height: 100%;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 /* Page Header */

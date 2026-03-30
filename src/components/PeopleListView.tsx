@@ -192,7 +192,7 @@ export function PeopleListView({ employees }: PeopleListViewProps) {
                 <div className="people-list-menu">
                   <button
                     className="people-list-menu-item"
-                    onClick={() => { setIsMenuOpen(false); navigate('/people/power-edit'); }}
+                    onClick={() => { setIsMenuOpen(false); navigate('/people/power-edit/edit'); }}
                   >
                     <BodyText size="medium">Power Edit Employees</BodyText>
                   </button>
