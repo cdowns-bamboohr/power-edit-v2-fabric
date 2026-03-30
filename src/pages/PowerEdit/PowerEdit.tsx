@@ -1056,7 +1056,6 @@ export function PowerEdit() {
     setFooterElevated(el.scrollTop + el.clientHeight < el.scrollHeight - 4);
   }
 
-  useEffect(() => { if (!hasSelection) { const t = setTimeout(() => setDescribeItOpen(true), 1000); return () => clearTimeout(t); } }, []);
   useEffect(() => { return () => { localStorage.removeItem('bhr-describe-it-open'); }; }, []);
   useEffect(() => { commitEditRef.current = commitEdit; });
   useEffect(() => {
@@ -1113,7 +1112,7 @@ export function PowerEdit() {
   }
 
   const activeCols = useMemo(
-    () => [...selectedFieldsToColumns(selectedFields, baseColumns), ...(useIndividualDates ? [{ key: 'effectiveDate' as ColKey, label: 'Effective Date' }] : [])],
+    () => [...(useIndividualDates ? [{ key: 'effectiveDate' as ColKey, label: 'Effective Date' }] : []), ...selectedFieldsToColumns(selectedFields, baseColumns)],
     [selectedFields, baseColumns, useIndividualDates]
   );
   const tableContext: TableContext = { columns: activeCols, employees: displayEmployees.map((e) => ({ id: e.id, data: Object.fromEntries(activeCols.map((col) => [col.label, edits[`${e.id}-${col.key}`]?.current ?? getOriginalValue(e, col.key, effectiveDate)])) })) };
@@ -1135,6 +1134,9 @@ export function PowerEdit() {
         const editKey = `${emp.id}-${key}`;
         row[key] = editsRef.current[editKey]?.current ?? getOriginalValue(emp, key, effectiveDate);
       });
+      // effectiveDate is not in ALL_COL_KEYS — always populate so the column has data when shown
+      const edKey = `${emp.id}-effectiveDate`;
+      row['effectiveDate'] = editsRef.current[edKey]?.current ?? getOriginalValue(emp, 'effectiveDate', effectiveDate);
       return row;
     });
   }
@@ -1142,7 +1144,7 @@ export function PowerEdit() {
   useEffect(() => {
     if (version === 2) dataGridRef.current?.setRowData(buildRows());
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [edits, sortedEmployees, version]);
+  }, [edits, sortedEmployees, version, useIndividualDates, effectiveDate]);
 
   const colDefs = useMemo(() => {
     if (version !== 2) return [];
@@ -1239,49 +1241,6 @@ export function PowerEdit() {
             Power Edit Assistant
           </Button>
 
-          {/* Employees / Fields */}
-          <ButtonGroup variant="outlined" color="secondary" size="medium">
-            <Dropdown
-              type="button"
-              ButtonProps={{
-                variant: 'outlined',
-                color: 'secondary',
-                size: 'medium',
-                startIcon: <IconV2 name={(EMPLOYEE_OPTIONS.find(o => o.label === selectedEmployeeType) ?? EMPLOYEE_OPTIONS[1]).icon as any} size={16} />,
-              }}
-              items={EMPLOYEE_OPTIONS.map(({ label }) => ({ text: label, value: label }))}
-              renderOptionContent={(item) => {
-                const opt = EMPLOYEE_OPTIONS.find(o => o.label === item.text);
-                return (
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <IconV2 name={(opt?.icon ?? 'user-group-regular') as any} size={16} />
-                    {item.text}
-                  </span>
-                );
-              }}
-              onSelect={(value) => setSelectedEmployeeType(value as string)}
-            >
-              {selectedEmployeeType}
-            </Dropdown>
-            <div>
-              <Button
-                variant="outlined"
-                color="secondary"
-                size="medium"
-                startIcon={<IconV2 name="table-columns-regular" size={16} />}
-                endIcon={<IconV2 name="caret-down-solid" size={10} />}
-                onClick={(e) => {
-                  if (fieldsOpen) { setFieldsOpen(false); return; }
-                  setFiltersOpen(false); setEffectivePanelOpen(false);
-                  setFieldsAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());
-                  setFieldsOpen(true);
-                }}
-              >
-                {selectedFields.length > 0 ? `Fields (${selectedFields.length})` : 'Fields'}
-              </Button>
-            </div>
-          </ButtonGroup>
-
           {/* Filters — dropdown button */}
           <div>
             <Button
@@ -1300,6 +1259,23 @@ export function PowerEdit() {
               {configuredFilters.length > 0 ? `Filters (${configuredFilters.length})` : 'Filters'}
             </Button>
           </div>
+
+          {/* Fields */}
+          <Button
+            variant="outlined"
+            color="secondary"
+            size="medium"
+            startIcon={<IconV2 name="table-columns-regular" size={16} />}
+            endIcon={<IconV2 name="caret-down-solid" size={10} />}
+            onClick={(e) => {
+              if (fieldsOpen) { setFieldsOpen(false); return; }
+              setFiltersOpen(false); setEffectivePanelOpen(false);
+              setFieldsAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());
+              setFieldsOpen(true);
+            }}
+          >
+            {selectedFields.length > 0 ? `Fields (${selectedFields.length})` : 'Fields'}
+          </Button>
 
           {/* Effective Date — dropdown button, turns primary when custom dates are active */}
           <div>
@@ -1321,9 +1297,7 @@ export function PowerEdit() {
           </div>
           </div>{/* end left toolbar group */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            {(['arrow-down-to-line-regular', 'user-plus-regular'] as const).map((iconName) => (
-              <IconButton key={iconName} icon={iconName} aria-label={iconName} variant="outlined" color="secondary" size="medium" />
-            ))}
+            <IconButton icon="arrow-down-to-line-regular" aria-label="Export" variant="outlined" color="secondary" size="medium" />
           </div>
         </div>
 
