@@ -20,7 +20,6 @@ import {
   SLIDEDOWN_TYPES,
   DatePicker,
   SelectField,
-  Checkbox,
   TextArea,
   Dropdown,
   RoundedToggle,
@@ -35,6 +34,8 @@ import {
 import { ClipboardIcon } from '../../assets/ClipboardIcon';
 import { employees, type Employee } from '../../data/employees';
 import { sendMessage, type ChatMessage, type PowerEditAction, type TableContext } from './openai';
+import { FiltersPanel, FilterRecord, FILTER_FIELD_OPTIONS, FILTER_OPERATORS, applyFilters } from '../../components/FiltersPanel';
+import { FieldsPanel, fieldsByCategory } from '../../components/FieldsPanel';
 import './PowerEdit.css';
 
 const SUGGESTIONS = [
@@ -88,7 +89,7 @@ function DescribeItPanel({ onClose, onAction, tableContext }: {
 
       {/* Header */}
       <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', background: 'var(--surface-neutral-xx-weak)', borderBottom: '1px solid var(--border-neutral-x-weak)' }}>
-        <BodyText size="medium" weight="semibold">Power Edit Assistant</BodyText>
+        <BodyText size="medium" weight="semibold">Ask BambooHR</BodyText>
         <IconButton icon="xmark-solid" aria-label="Close" variant="outlined" color="secondary" size="small" onClick={onClose} />
       </div>
 
@@ -113,15 +114,12 @@ function DescribeItPanel({ onClose, onAction, tableContext }: {
         </div>
       ) : (
         /* Blank state */
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 20px', gap: 16 }}>
-          <div style={{ width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--color-ai-strong)', borderRadius: '50%' }}>
-            <IconV2 name="sparkles-solid" size={20} />
-          </div>
-          <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <BodyText size="medium" weight="semibold">Describe the edits you'd like to make</BodyText>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '24px 20px', gap: 12 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <Headline size="small" color="primary">What would you like to edit?</Headline>
             <BodyText size="small" color="neutral-weak">I'll apply your changes directly to the table.</BodyText>
           </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {SUGGESTIONS.map((s) => (
               <Button key={s} variant="outlined" size="small" onClick={() => handleSend(s)}>{s}</Button>
             ))}
@@ -154,340 +152,12 @@ function DescribeItPanel({ onClose, onAction, tableContext }: {
   );
 }
 
-// ─── Fields Panel ─────────────────────────────────────────────────────────────
-const fieldCategories = ['Personal', 'Job', 'Time Off', 'Benefits', 'Training', 'Performance', 'Assets', 'Notes', 'Emergency', 'Tasks', 'Calculated'];
-type FieldType = 'text' | 'date' | 'number' | 'list';
-type FieldDef = { name: string; type: FieldType };
-
-const fieldsByCategory: Record<string, FieldDef[]> = {
-  Personal: [{ name: 'Name', type: 'text' }, { name: 'Employee #', type: 'number' }, { name: 'Status', type: 'list' }, { name: 'First Name', type: 'text' }, { name: 'Middle Name', type: 'text' }, { name: 'Last Name', type: 'text' }, { name: 'Preferred Name', type: 'text' }, { name: 'Birth Date', type: 'date' }, { name: 'Gender', type: 'list' }, { name: 'Gender Identity', type: 'list' }, { name: 'Pronouns', type: 'text' }, { name: 'Ethnicity', type: 'list' }, { name: 'Marital Status', type: 'list' }, { name: 'SSN', type: 'text' }, { name: 'Tax File Number', type: 'text' }],
-  Job: [{ name: 'Job Title', type: 'text' }, { name: 'Department', type: 'list' }, { name: 'Location', type: 'list' }, { name: 'Hire Date', type: 'date' }, { name: 'Manager', type: 'text' }, { name: 'Pay Rate', type: 'number' }, { name: 'Employment Status', type: 'list' }, { name: 'Employment Type', type: 'list' }, { name: 'Division', type: 'list' }, { name: 'Cost Center', type: 'text' }],
-  'Time Off': [{ name: 'Available Balance', type: 'number' }, { name: 'Used YTD', type: 'number' }, { name: 'Policy', type: 'list' }, { name: 'Next Accrual Date', type: 'date' }],
-  Benefits: [{ name: 'Plan Name', type: 'text' }, { name: 'Coverage Level', type: 'list' }, { name: 'Benefit Effective Date', type: 'date' }, { name: 'Annual Cost', type: 'number' }],
-  Training: [{ name: 'Course Name', type: 'text' }, { name: 'Completion Date', type: 'date' }, { name: 'Training Status', type: 'list' }, { name: 'Score', type: 'number' }],
-  Performance: [{ name: 'Review Date', type: 'date' }, { name: 'Rating', type: 'number' }, { name: 'Reviewer', type: 'text' }, { name: 'Goal Status', type: 'list' }],
-  Assets: [{ name: 'Asset Name', type: 'text' }, { name: 'Serial Number', type: 'text' }, { name: 'Assigned Date', type: 'date' }, { name: 'Asset Category', type: 'list' }],
-  Notes: [{ name: 'Note', type: 'text' }, { name: 'Date Added', type: 'date' }, { name: 'Note Type', type: 'list' }],
-  Emergency: [{ name: 'Contact Name', type: 'text' }, { name: 'Relationship', type: 'list' }, { name: 'Phone', type: 'text' }, { name: 'Email', type: 'text' }],
-  Tasks: [{ name: 'Task Name', type: 'text' }, { name: 'Due Date', type: 'date' }, { name: 'Task Status', type: 'list' }, { name: 'Assignee', type: 'text' }],
-  Calculated: [{ name: 'Tenure (Years)', type: 'number' }, { name: 'Age', type: 'number' }, { name: 'Days Since Hire', type: 'number' }],
-};
-
-function FieldTypeIcon({ type }: { type: FieldType }) {
-  if (type === 'date') return <IconV2 name="calendar-solid" size={12} />;
-  const label = type === 'number' ? '#' : type === 'list' ? '≡' : 'T';
-  return <span style={{ fontSize: 11, fontWeight: 700, lineHeight: 1, width: 13, textAlign: 'center', color: 'var(--icon-neutral-medium)', flexShrink: 0 }}>{label}</span>;
-}
-
-function FieldsPanel({ onClose, selectedFields, onSelectedFieldsChange, anchor }: { onClose: () => void; selectedFields: string[]; onSelectedFieldsChange: (fields: string[]) => void; anchor: DOMRect }) {
-  const [activeCategory, setActiveCategory] = useState('Personal');
-  const [search, setSearch] = useState('');
-  const [dragIdx, setDragIdx] = useState<number | null>(null);
-  const [overIdx, setOverIdx] = useState<number | null>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function h(e: MouseEvent) { if (panelRef.current && !panelRef.current.contains(e.target as Node)) onClose(); }
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, [onClose]);
-
-  const categoryFields = fieldsByCategory[activeCategory] ?? [];
-  const filtered = search ? Object.values(fieldsByCategory).flat().filter((f) => f.name.toLowerCase().includes(search.toLowerCase())) : categoryFields;
-  const sectionHeading = search ? 'Search results' : activeCategory;
-
-  return (
-    <div ref={panelRef} style={{ position: 'fixed', top: anchor.bottom + 8, left: anchor.left, zIndex: 9999, background: 'var(--surface-neutral-white)', borderRadius: 16, display: 'flex', flexDirection: 'column', overflow: 'hidden', width: 760, height: 520, boxShadow: '3px 3px 10px 2px rgba(56,49,47,0.10), 1px 1px 0px 1px rgba(56,49,47,0.04)' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 20px 0', flexShrink: 0 }}>
-        <BodyText size="large" weight="semibold" color="primary">Fields</BodyText>
-        <IconButton icon="xmark-solid" aria-label="Close" variant="outlined" color="secondary" size="small" onClick={onClose} />
-      </div>
-
-      {/* Body: three columns */}
-      <div style={{ display: 'flex', flex: 1, minHeight: 0, marginTop: 16 }}>
-
-        {/* Left: search + categories */}
-        <div style={{ width: 200, flexShrink: 0, display: 'flex', flexDirection: 'column', padding: '0 12px 16px', overflowY: 'auto', borderRight: '1px solid var(--border-neutral-x-weak)' }}>
-          <div style={{ marginBottom: 12 }}>
-            <TextField
-              size="small"
-              placeholder="Search fields"
-              value={search}
-              onChange={(e) => setSearch((e.target as HTMLInputElement).value)}
-              width={100}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <IconV2 name="magnifying-glass-solid" size={12} />
-                  </InputAdornment>
-                ),
-              }}
-            />
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {fieldCategories.map((cat) => {
-              const isActive = activeCategory === cat && !search;
-              return (
-                <button key={cat} onClick={() => { setActiveCategory(cat); setSearch(''); }}
-                  style={{ width: '100%', textAlign: 'left', padding: '8px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', background: isActive ? 'var(--color-primary-strong)' : 'transparent' }}>
-                  <BodyText size="small" weight={isActive ? 'semibold' : 'regular'} color={isActive ? undefined : 'neutral-strong'}>
-                    <span style={isActive ? { color: 'white' } : undefined}>{cat}</span>
-                  </BodyText>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Middle: section heading + field checkboxes */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflowY: 'auto', padding: '0 16px 16px' }}>
-          <div style={{ padding: '12px 0 8px', position: 'sticky', top: 0, background: 'var(--surface-neutral-white)', zIndex: 1 }}>
-            <BodyText size="small" weight="semibold" color="neutral-strong">{sectionHeading}</BodyText>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-            {filtered.map((field) => {
-              const checked = selectedFields.includes(field.name);
-              return (
-                <div key={field.name} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px', borderRadius: 6 }}>
-                  <Checkbox
-                    checked={checked}
-                    value={field.name}
-                    name={field.name}
-                    size="small"
-                    onChange={({ checked: c }) => {
-                      onSelectedFieldsChange(c ? [...selectedFields, field.name] : selectedFields.filter((f) => f !== field.name));
-                    }}
-                    label={
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <FieldTypeIcon type={field.type} />
-                        <BodyText size="extra-small" color="neutral-strong">{field.name}</BodyText>
-                      </span>
-                    }
-                  />
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Right: selected fields */}
-        <div style={{ width: 220, flexShrink: 0, display: 'flex', flexDirection: 'column', borderLeft: '1px solid var(--border-neutral-x-weak)', overflowY: 'auto', padding: '0 12px 16px' }}>
-          <div style={{ padding: '12px 0 8px', position: 'sticky', top: 0, background: 'var(--surface-neutral-white)', zIndex: 1 }}>
-            <BodyText size="small" weight="semibold" color="neutral-strong">Selected</BodyText>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {selectedFields.map((name, idx) => {
-              const allFields = Object.values(fieldsByCategory).flat();
-              const fieldDef = allFields.find((f) => f.name === name);
-              const isDragging = dragIdx === idx;
-              const isOver = overIdx === idx && dragIdx !== null && dragIdx !== idx;
-              return (
-                <div key={name} draggable
-                  onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; setDragIdx(idx); }}
-                  onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setOverIdx(idx); }}
-                  onDrop={(e) => { e.preventDefault(); if (dragIdx === null || dragIdx === idx) return; const next = [...selectedFields]; const [moved] = next.splice(dragIdx, 1); next.splice(idx, 0, moved); onSelectedFieldsChange(next); setDragIdx(null); setOverIdx(null); }}
-                  onDragEnd={() => { setDragIdx(null); setOverIdx(null); }}
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 8, border: `1px solid ${isOver ? 'var(--color-primary-strong)' : 'var(--border-neutral-weak)'}`, background: 'var(--surface-neutral-white)', userSelect: 'none', cursor: 'grab', opacity: isDragging ? 0.4 : 1, boxShadow: isOver ? '0 0 0 1px var(--color-primary-strong)' : undefined }}>
-                  <span style={{ color: 'var(--icon-neutral-weak)', fontSize: 14, flexShrink: 0 }}>⠿</span>
-                  {fieldDef && <FieldTypeIcon type={fieldDef.type} />}
-                  <BodyText size="extra-small" color="neutral-strong">
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', maxWidth: 110 }}>{name}</span>
-                  </BodyText>
-                  <span style={{ marginLeft: 'auto', flexShrink: 0 }}>
-                    <IconButton
-                      icon="circle-xmark-regular"
-                      aria-label={`Remove ${name}`}
-                      noBoundingBox
-                      color="secondary"
-                      size="small"
-                      onMouseDown={(e: React.MouseEvent) => { e.stopPropagation(); e.preventDefault(); onSelectedFieldsChange(selectedFields.filter((f) => f !== name)); }}
-                    />
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── Employees Dropdown ───────────────────────────────────────────────────────
 const EMPLOYEE_OPTIONS = [
   { label: 'Company', icon: 'building-regular' }, { label: 'Employee', icon: 'user-group-regular' },
   { label: 'Benefit Elections', icon: 'heart-regular' }, { label: 'Applicants', icon: 'id-badge-regular' }, { label: 'Payroll', icon: 'circle-dollar-regular' },
 ];
 
-
-// ─── Filters Panel ────────────────────────────────────────────────────────────
-type FilterRecord = { id: number; field: string; operator: string; value: string | string[]; dateTo: string };
-const FILTER_FIELD_OPTIONS = ['Department', 'Location', 'Division', 'Employment Type', 'Employment Status', 'Job Title', 'Hire Date', 'Birth Date', 'Gender', 'Ethnicity'];
-const DATE_FILTER_FIELDS = new Set(['Hire Date', 'Birth Date']);
-const FILTER_OPERATORS: Record<string, string[]> = {
-  date: ['is during', 'is before', 'is after', 'is on'],
-  default: ['includes', 'excludes', 'is', 'is not'],
-};
-
-function FiltersPanel({ onClose, initialFilterField, filters, onFiltersChange, matchAll, onMatchAllChange, nextIdRef, anchor }: {
-  onClose: () => void; initialFilterField?: string | null; filters: FilterRecord[];
-  onFiltersChange: (f: FilterRecord[]) => void; matchAll: boolean; onMatchAllChange: (v: boolean) => void;
-  nextIdRef: React.MutableRefObject<number>; anchor: DOMRect;
-}) {
-  const [matchDropdownOpen, setMatchDropdownOpen] = useState(false);
-
-  useEffect(() => {
-    if (initialFilterField) {
-      const isDate = DATE_FILTER_FIELDS.has(initialFilterField);
-      onFiltersChange([...filters, { id: nextIdRef.current++, field: initialFilterField, operator: FILTER_OPERATORS[isDate ? 'date' : 'default'][0], value: isDate ? '' : [], dateTo: '' }]);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const panelRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    function h(e: MouseEvent) {
-      const target = e.target as Node;
-      // Don't close when clicking inside a Fabric dropdown menu (portalled outside the panel)
-      const insideFabricMenu = (target as Element).closest?.('.fab-MenuList, .fab-Menu, .fab-SelectToggle');
-      if (insideFabricMenu) return;
-      if (panelRef.current && !panelRef.current.contains(target)) onClose();
-    }
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, [onClose]);
-
-  function updateFilter(id: number, patch: Partial<FilterRecord>) { onFiltersChange(filters.map((f) => (f.id === id ? { ...f, ...patch } : f))); }
-  function removeFilter(id: number) { onFiltersChange(filters.filter((f) => f.id !== id)); }
-  function addFilter() { onFiltersChange([...filters, { id: nextIdRef.current++, field: 'Department', operator: 'is', value: [], dateTo: '' }]); }
-
-  return (
-    <div ref={panelRef} style={{ position: 'fixed', top: anchor.bottom + 8, left: anchor.left, zIndex: 9999, background: 'var(--surface-neutral-white)', borderRadius: 16, padding: 20, display: 'flex', flexDirection: 'column', gap: 12, minWidth: 580, boxShadow: '3px 3px 10px 2px rgba(56,49,47,0.10), 1px 1px 0px 1px rgba(56,49,47,0.04)' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <BodyText size="large" weight="semibold" color="primary">Filters</BodyText>
-        <IconButton icon="xmark-solid" aria-label="Close" variant="outlined" color="secondary" size="small" onClick={onClose} />
-      </div>
-
-      {/* Records matching All/Any — TextButton with caret + inline popover */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        <BodyText size="extra-small" color="neutral-medium">Records matching</BodyText>
-        <div style={{ position: 'relative', display: 'inline-block' }}>
-          <TextButton onClick={() => setMatchDropdownOpen((v) => !v)}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <IconV2 name="caret-down-solid" size={10} />
-              {matchAll ? 'All' : 'Any'}
-            </span>
-          </TextButton>
-          {matchDropdownOpen && (
-            <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 60, background: 'var(--surface-neutral-white)', borderRadius: 8, border: '1px solid var(--border-neutral-weak)', boxShadow: '0 2px 8px rgba(56,49,47,0.12)', overflow: 'hidden', minWidth: 80 }}>
-              {(['Any', 'All'] as const).map((opt) => (
-                <button
-                  key={opt}
-                  onClick={() => { onMatchAllChange(opt === 'All'); setMatchDropdownOpen(false); }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--surface-neutral-xx-weak)'; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = (opt === 'All') === matchAll ? 'var(--surface-neutral-x-weak)' : 'transparent'; }}
-                  style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', border: 'none', cursor: 'pointer', background: (opt === 'All') === matchAll ? 'var(--surface-neutral-x-weak)' : 'transparent', fontFamily: 'Inter, system-ui, sans-serif', fontSize: 14, color: 'var(--text-neutral-strong)' }}
-                >
-                  {opt}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Filter rows */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {filters.map((filter) => {
-          const isDate = DATE_FILTER_FIELDS.has(filter.field);
-          const operators = FILTER_OPERATORS[isDate ? 'date' : 'default'];
-          const valueOptions = FILTER_FIELD_VALUES[filter.field] ?? [];
-          return (
-            <div key={filter.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              {/* Field selector */}
-              <div style={{ flexShrink: 0, width: 160 }}>
-                <SelectField
-                  variant="form"
-                  size="small"
-                  value={filter.field}
-                  items={FILTER_FIELD_OPTIONS.map((f) => ({ text: f, value: f }))}
-                  onChange={(e) => {
-                    const newField = e.target.value as string;
-                    updateFilter(filter.id, { field: newField, operator: FILTER_OPERATORS[DATE_FILTER_FIELDS.has(newField) ? 'date' : 'default'][0], value: '', dateTo: '' });
-                  }}
-                />
-              </div>
-              {/* Operator selector */}
-              <div style={{ flexShrink: 0, width: 130 }}>
-                <SelectField
-                  variant="form"
-                  size="small"
-                  value={filter.operator}
-                  items={operators.map((op) => ({ text: op, value: op }))}
-                  onChange={(e) => updateFilter(filter.id, { operator: e.target.value as string })}
-                />
-              </div>
-              {/* Value */}
-              {isDate ? (
-                <>
-                  <div style={{ flexShrink: 0, width: 140 }}>
-                    <DatePicker
-                      value={(filter.value as string) || undefined}
-                      onChange={({ value }) => updateFilter(filter.id, { value: value ?? '' })}
-                      size="small"
-                      width={100}
-                    />
-                  </div>
-                  <BodyText size="small" color="neutral-medium">–</BodyText>
-                  <div style={{ flexShrink: 0, width: 140 }}>
-                    <DatePicker
-                      value={filter.dateTo || undefined}
-                      onChange={({ value }) => updateFilter(filter.id, { dateTo: value ?? '' })}
-                      size="small"
-                      width={100}
-                    />
-                  </div>
-                </>
-              ) : (
-                <div style={{ flexShrink: 0, width: 170 }}>
-                  <SelectField
-                    variant="form"
-                    size="small"
-                    canSelectMultiple
-                    value={Array.isArray(filter.value) ? filter.value : (filter.value ? [filter.value] : [])}
-                    items={valueOptions.map((v) => ({ text: v, value: v }))}
-                    onChange={(e) => updateFilter(filter.id, { value: e.target.value as string[] })}
-                  />
-                </div>
-              )}
-              {/* Remove */}
-              <IconButton
-                icon="trash-can-regular"
-                aria-label="Remove filter"
-                variant="text"
-                color="secondary"
-                size="small"
-                onClick={() => removeFilter(filter.id)}
-              />
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Add filter */}
-      <div style={{ alignSelf: 'flex-start' }}>
-        <TextButton onClick={addFilter}>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <IconV2 name="circle-plus-regular" size={16} />
-            Add filter
-          </span>
-        </TextButton>
-      </div>
-    </div>
-  );
-}
 
 // ─── Helpers & Derived Data ───────────────────────────────────────────────────
 function formatSalary(amount: number): string { return `$ ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; }
@@ -971,53 +641,6 @@ function BulkEditPanel({ col, rowCount, onApply, onClose }: { col: { key: ColKey
   );
 }
 
-// ─── Filter Property Map ───────────────────────────────────────────────────────
-const FILTER_FIELD_TO_PROP: Record<string, (e: Employee) => string> = {
-  'Department': (e) => e.department,
-  'Location': (e) => e.location,
-  'Division': (e) => e.division,
-  'Employment Type': (e) => e.employmentType,
-  'Employment Status': (e) => e.employmentStatus,
-  'Job Title': (e) => e.title,
-  'Gender': (e) => e.gender,
-  'Ethnicity': (e) => e.ethnicity,
-  'Hire Date': (e) => parseMDYToISO(e.hireDate),
-  'Birth Date': (e) => parseMDYToISO(e.birthDate),
-};
-
-function applyFilters(emps: Employee[], filters: FilterRecord[], matchAll: boolean): Employee[] {
-  const configured = filters.filter((f) => (Array.isArray(f.value) ? f.value.length > 0 : f.value) || f.dateTo);
-  if (configured.length === 0) return emps;
-  return emps.filter((emp) => {
-    const results = configured.map((filter) => {
-      const getProp = FILTER_FIELD_TO_PROP[filter.field];
-      if (!getProp) return true;
-      const empVal = getProp(emp).toLowerCase();
-      const filterValues = Array.isArray(filter.value) ? filter.value : [filter.value];
-      const filterVal = filterValues[0]?.toLowerCase() ?? '';
-      switch (filter.operator) {
-        case 'includes': return empVal.includes(filterVal);
-        case 'excludes': return !empVal.includes(filterVal);
-        case 'is': return filterValues.some((v) => empVal === v.toLowerCase());
-        case 'is not': return filterValues.every((v) => empVal !== v.toLowerCase());
-        case 'is before': return filter.value ? empVal < filter.value : true;
-        case 'is after': return filter.value ? empVal > filter.value : true;
-        case 'is on': return empVal === filter.value;
-        case 'is during': {
-          const from = filter.value;
-          const to = filter.dateTo;
-          if (from && to) return empVal >= from && empVal <= to;
-          if (from) return empVal >= from;
-          if (to) return empVal <= to;
-          return true;
-        }
-        default: return true;
-      }
-    });
-    return matchAll ? results.every(Boolean) : results.some(Boolean);
-  });
-}
-
 // ─── DataGrid Column Header (V2) ──────────────────────────────────────────────
 function DataGridColHeader(props: IHeaderParams & { onMenuOpen: (anchor: DOMRect) => void }) {
   const [hovered, setHovered] = useState(false);
@@ -1306,7 +929,7 @@ export function PowerEdit() {
             startIcon={<IconV2 name="sparkles-regular" size={16} />}
             onClick={() => { setDescribeItClosing(false); setDescribeItOpen(true); localStorage.setItem('bhr-describe-it-open', 'true'); }}
           >
-            Power Edit Assistant
+            Edit with Ask
           </Button>
 
           {/* Filters — dropdown button */}
@@ -1388,7 +1011,7 @@ export function PowerEdit() {
           document.body
         )}
         {filtersOpen && filtersAnchor && createPortal(
-          <FiltersPanel anchor={filtersAnchor} onClose={() => { setFiltersOpen(false); setPendingFilterField(null); }} initialFilterField={pendingFilterField} filters={filters} onFiltersChange={setFilters} matchAll={filterMatchAll} onMatchAllChange={setFilterMatchAll} nextIdRef={filterNextId} />,
+          <FiltersPanel anchor={filtersAnchor} onClose={() => { setFiltersOpen(false); setPendingFilterField(null); }} initialFilterField={pendingFilterField} filters={filters} onFiltersChange={setFilters} matchAll={filterMatchAll} onMatchAllChange={setFilterMatchAll} nextIdRef={filterNextId} filterFieldValues={FILTER_FIELD_VALUES} />,
           document.body
         )}
         {effectivePanelOpen && effectivePanelAnchor && editMode === 'new-row' && createPortal(

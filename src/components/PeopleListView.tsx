@@ -1,4 +1,5 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import {
   IconV2,
@@ -6,13 +7,75 @@ import {
   Section,
   IconButton,
   Button,
+  SelectField,
   Link,
   Avatar,
-  SelectField,
 } from '@bamboohr/fabric';
 import { Pagination } from './Pagination';
+import { FiltersPanel, FilterRecord, applyFilters } from './FiltersPanel';
+import { FieldsPanel } from './FieldsPanel';
 import type { Employee } from '../data/employees';
 import './PeopleListView.css';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type ColKey = 'avatar' | 'employeeNumber' | 'name' | 'title' | 'department' | 'location' | 'division' | 'employmentType' | 'employmentStatus' | 'hireDate' | 'reportsTo';
+
+type ColDef = { key: ColKey; label: string };
+
+// ─── Column definitions ───────────────────────────────────────────────────────
+
+const ALL_COLS: ColDef[] = [
+  { key: 'avatar', label: 'Photo' },
+  { key: 'employeeNumber', label: 'Employee #' },
+  { key: 'name', label: 'Name' },
+  { key: 'title', label: 'Job Title' },
+  { key: 'department', label: 'Department' },
+  { key: 'location', label: 'Location' },
+  { key: 'division', label: 'Division' },
+  { key: 'employmentType', label: 'Employment Type' },
+  { key: 'employmentStatus', label: 'Employment Status' },
+  { key: 'hireDate', label: 'Hire Date' },
+  { key: 'reportsTo', label: 'Manager' },
+];
+
+// Map from FieldsPanel field names → ColKey
+const FIELD_NAME_TO_COL: Record<string, ColKey> = {
+  'Employee #': 'employeeNumber',
+  'Name': 'name',
+  'Job Title': 'title',
+  'Department': 'department',
+  'Location': 'location',
+  'Division': 'division',
+  'Employment Type': 'employmentType',
+  'Employment Status': 'employmentStatus',
+  'Hire Date': 'hireDate',
+  'Manager': 'reportsTo',
+};
+
+// Default selected fields (matches original default visible cols minus avatar which is always shown)
+const DEFAULT_SELECTED_FIELDS = ['Employee #', 'Name', 'Job Title', 'Location', 'Employment Status', 'Hire Date'];
+
+// ─── Cell renderer ────────────────────────────────────────────────────────────
+
+function renderCell(col: ColKey, employee: Employee) {
+  switch (col) {
+    case 'avatar': return <Avatar src={employee.avatar} alt={employee.name} size={40} />;
+    case 'employeeNumber': return <BodyText size="medium">{employee.employeeNumber}</BodyText>;
+    case 'name': return <Link href={`/employees/${employee.id}`}>{employee.lastName}, {employee.firstName}</Link>;
+    case 'title': return <BodyText size="medium" color="neutral-medium">{employee.title}</BodyText>;
+    case 'department': return <BodyText size="medium" color="neutral-medium">{employee.department}</BodyText>;
+    case 'location': return <BodyText size="medium" color="neutral-medium">{employee.location}</BodyText>;
+    case 'division': return <BodyText size="medium" color="neutral-medium">{employee.division}</BodyText>;
+    case 'employmentType': return <BodyText size="medium" color="neutral-medium">{employee.employmentType}</BodyText>;
+    case 'employmentStatus': return <BodyText size="medium" color="neutral-medium">{employee.employmentStatus}</BodyText>;
+    case 'hireDate': return <BodyText size="medium" color="neutral-medium">{employee.hireDate}</BodyText>;
+    case 'reportsTo': return <BodyText size="medium" color="neutral-medium">{employee.reportsTo ?? '—'}</BodyText>;
+    default: return null;
+  }
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 
 interface PeopleListViewProps {
   employees: Employee[];
@@ -21,12 +84,38 @@ interface PeopleListViewProps {
 export function PeopleListView({ employees }: PeopleListViewProps) {
   const navigate = useNavigate();
   const [currentPage, setCurrentPage] = useState(1);
-  const [filterStatus, setFilterStatus] = useState('all');
   const [showingFilter, setShowingFilter] = useState('active');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+
+  // Filters
+  const [filters, setFilters] = useState<FilterRecord[]>([]);
+  const [filterMatchAll, setFilterMatchAll] = useState(true);
+  const filterNextIdRef = useRef(1);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filtersAnchor, setFiltersAnchor] = useState<DOMRect | null>(null);
+
+  // Fields (visible columns via shared FieldsPanel)
+  const [selectedFields, setSelectedFields] = useState<string[]>(DEFAULT_SELECTED_FIELDS);
+  const [fieldsOpen, setFieldsOpen] = useState(false);
+  const [fieldsAnchor, setFieldsAnchor] = useState<DOMRect | null>(null);
+
   const menuRef = useRef<HTMLDivElement>(null);
   const itemsPerPage = 50;
+
+  // Compute filter field values from employee data
+  const filterFieldValues = useMemo<Record<string, string[]>>(() => ({
+    'Department': [...new Set(employees.map((e) => e.department))].sort(),
+    'Location': [...new Set(employees.map((e) => e.location))].sort(),
+    'Division': [...new Set(employees.map((e) => e.division))].sort(),
+    'Employment Type': [...new Set(employees.map((e) => e.employmentType))].sort(),
+    'Employment Status': [...new Set(employees.map((e) => e.employmentStatus))].sort(),
+    'Job Title': [...new Set(employees.map((e) => e.title))].sort(),
+    'Gender': [...new Set(employees.map((e) => e.gender))].sort(),
+    'Ethnicity': [...new Set(employees.map((e) => e.ethnicity))].sort(),
+    'Hire Date': [],
+    'Birth Date': [],
+  }), [employees]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -38,31 +127,28 @@ export function PeopleListView({ employees }: PeopleListViewProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const statusOptions = [
-    { value: 'all', label: 'Employees' },
-    { value: 'Full-Time', label: 'Full-Time' },
-    { value: 'Part-Time', label: 'Part-Time' },
-    { value: 'Contractor', label: 'Contractor' },
-  ];
-
   const showingOptions = [
     { value: 'active', label: 'Active' },
     { value: 'inactive', label: 'Inactive' },
     { value: 'all', label: 'All' },
   ];
 
-  const filteredEmployees = useMemo(() => {
-    let result = employees;
-    if (filterStatus !== 'all') {
-      result = result.filter((emp) => emp.employmentStatus === filterStatus);
-    }
-    if (showingFilter === 'active') {
-      result = result.filter((emp) => emp.employmentStatus !== 'Inactive');
-    } else if (showingFilter === 'inactive') {
-      result = result.filter((emp) => emp.employmentStatus === 'Inactive');
-    }
-    return result;
-  }, [employees, filterStatus, showingFilter]);
+  // Apply showing filter first, then active filters
+  const baseEmployees = useMemo(() => {
+    if (showingFilter === 'active') return employees.filter((e) => e.employmentStatus !== 'Inactive');
+    if (showingFilter === 'inactive') return employees.filter((e) => e.employmentStatus === 'Inactive');
+    return employees;
+  }, [employees, showingFilter]);
+
+  const activeFilters = useMemo(
+    () => filters.filter((f) => Array.isArray(f.value) ? f.value.length > 0 : f.value),
+    [filters]
+  );
+
+  const filteredEmployees = useMemo(
+    () => applyFilters(baseEmployees, filters, filterMatchAll),
+    [baseEmployees, filters, filterMatchAll]
+  );
 
   const totalItems = filteredEmployees.length;
   const totalPages = Math.ceil(totalItems / itemsPerPage);
@@ -74,6 +160,22 @@ export function PeopleListView({ employees }: PeopleListViewProps) {
   const selectedCount = selectedIds.size;
   const allOnPageSelected = currentEmployees.length > 0 && currentEmployees.every((e) => selectedIds.has(e.id));
   const someOnPageSelected = currentEmployees.some((e) => selectedIds.has(e.id));
+
+  // Compute visible column defs from selectedFields (avatar always first)
+  const visibleColDefs = useMemo(() => {
+    const cols: ColDef[] = [{ key: 'avatar', label: 'Photo' }];
+    for (const name of selectedFields) {
+      const key = FIELD_NAME_TO_COL[name];
+      if (key) {
+        const def = ALL_COLS.find((c) => c.key === key);
+        if (def) cols.push(def);
+      }
+    }
+    return cols;
+  }, [selectedFields]);
+
+  const closeFilters = useCallback(() => setFiltersOpen(false), []);
+  const closeFields = useCallback(() => setFieldsOpen(false), []);
 
   function toggleRow(id: number) {
     setSelectedIds((prev) => {
@@ -103,28 +205,39 @@ export function PeopleListView({ employees }: PeopleListViewProps) {
     <div className="people-list-view">
       {/* Filter Bar */}
       <div className="people-list-filter-bar">
-        {/* Left: filter icon + status pill + count */}
+        {/* Left: Filters + Fields + count */}
         <div className="people-list-filter-left">
-          <IconButton
-            icon="sliders-solid"
-            aria-label="Filter"
+          <Button
             variant="outlined"
             color="secondary"
             size="medium"
-          />
+            startIcon={<IconV2 name="sliders-regular" size={16} />}
+            endIcon={<IconV2 name="caret-down-solid" size={10} />}
+            onClick={(e: React.MouseEvent) => {
+              if (filtersOpen) { setFiltersOpen(false); return; }
+              setFieldsOpen(false);
+              setFiltersAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());
+              setFiltersOpen(true);
+            }}
+          >
+            {activeFilters.length > 0 ? `Filters (${activeFilters.length})` : 'Filters'}
+          </Button>
 
-          <div className="people-list-select-filter">
-            <SelectField
-              size="medium"
-              variant="single"
-              value={filterStatus}
-              onChange={(e) => { setFilterStatus(e.target.value); setCurrentPage(1); }}
-            >
-              {statusOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </SelectField>
-          </div>
+          <Button
+            variant="outlined"
+            color="secondary"
+            size="medium"
+            startIcon={<IconV2 name="table-columns-regular" size={16} />}
+            endIcon={<IconV2 name="caret-down-solid" size={10} />}
+            onClick={(e: React.MouseEvent) => {
+              if (fieldsOpen) { setFieldsOpen(false); return; }
+              setFiltersOpen(false);
+              setFieldsAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());
+              setFieldsOpen(true);
+            }}
+          >
+            Fields
+          </Button>
 
           <div className="people-list-count">
             <IconV2 name="users-solid" size={16} color="neutral-medium" />
@@ -149,7 +262,7 @@ export function PeopleListView({ employees }: PeopleListViewProps) {
               color="secondary"
               size="medium"
               startIcon={<IconV2 name="bolt-solid" size={16} />}
-              onClick={() => navigate('/people/power-edit/edit', { state: { selectedIds: Array.from(selectedIds) } })}
+              onClick={() => navigate('/people/power-edit/edit', { state: { selectedIds: Array.from(selectedIds), filters, selectedFields } })}
             >
               Power Edit
             </Button>
@@ -171,7 +284,7 @@ export function PeopleListView({ employees }: PeopleListViewProps) {
                 size="medium"
                 variant="single"
                 value={showingFilter}
-                onChange={(e) => { setShowingFilter(e.target.value); setCurrentPage(1); }}
+                onChange={(e) => { setShowingFilter(e.target.value as string); setCurrentPage(1); }}
               >
                 {showingOptions.map((opt) => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -190,10 +303,7 @@ export function PeopleListView({ employees }: PeopleListViewProps) {
               />
               {isMenuOpen && (
                 <div className="people-list-menu">
-                  <button
-                    className="people-list-menu-item"
-                    onClick={() => { setIsMenuOpen(false); navigate('/people/power-edit/edit'); }}
-                  >
+                  <button className="people-list-menu-item" onClick={() => { setIsMenuOpen(false); navigate('/people/power-edit/edit'); }}>
                     <BodyText size="medium">Power Edit Employees</BodyText>
                   </button>
                   <button className="people-list-menu-item" onClick={() => setIsMenuOpen(false)}>
@@ -208,6 +318,30 @@ export function PeopleListView({ employees }: PeopleListViewProps) {
           </div>
         )}
       </div>
+
+      {/* Panels */}
+      {filtersOpen && filtersAnchor && createPortal(
+        <FiltersPanel
+          anchor={filtersAnchor}
+          filters={filters}
+          onFiltersChange={setFilters}
+          matchAll={filterMatchAll}
+          onMatchAllChange={setFilterMatchAll}
+          nextIdRef={filterNextIdRef}
+          onClose={closeFilters}
+          filterFieldValues={filterFieldValues}
+        />,
+        document.body
+      )}
+      {fieldsOpen && fieldsAnchor && createPortal(
+        <FieldsPanel
+          anchor={fieldsAnchor}
+          selectedFields={selectedFields}
+          onSelectedFieldsChange={setSelectedFields}
+          onClose={closeFields}
+        />,
+        document.body
+      )}
 
       {/* Table */}
       <Section>
@@ -224,13 +358,9 @@ export function PeopleListView({ employees }: PeopleListViewProps) {
                     style={{ width: 16, height: 16, cursor: 'pointer', accentColor: 'var(--color-primary-strong)' }}
                   />
                 </th>
-                <th>Employee Photo</th>
-                <th>Employee #</th>
-                <th>Last Name, First Name</th>
-                <th>Job Title</th>
-                <th>Location</th>
-                <th>Employment Status</th>
-                <th>Hire Date</th>
+                {visibleColDefs.map((col) => (
+                  <th key={col.key}>{col.label}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -247,17 +377,9 @@ export function PeopleListView({ employees }: PeopleListViewProps) {
                       style={{ width: 16, height: 16, cursor: 'pointer', accentColor: 'var(--color-primary-strong)' }}
                     />
                   </td>
-                  <td><Avatar src={employee.avatar} alt={employee.name} size={64} /></td>
-                  <td><BodyText size="medium">{employee.employeeNumber}</BodyText></td>
-                  <td>
-                    <Link href={`/employees/${employee.id}`}>
-                      {employee.lastName}, {employee.firstName}
-                    </Link>
-                  </td>
-                  <td><BodyText size="medium" color="neutral-medium">{employee.jobTitle}</BodyText></td>
-                  <td><BodyText size="medium" color="neutral-medium">{employee.location}</BodyText></td>
-                  <td><BodyText size="medium" color="neutral-medium">{employee.employmentStatus}</BodyText></td>
-                  <td><BodyText size="medium" color="neutral-medium">{employee.hireDate}</BodyText></td>
+                  {visibleColDefs.map((col) => (
+                    <td key={col.key}>{renderCell(col.key, employee)}</td>
+                  ))}
                 </tr>
               ))}
             </tbody>

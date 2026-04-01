@@ -199,7 +199,8 @@ Guidelines:
 - If the user's request is ambiguous, ask a quick clarifying question before acting.
 - If you need to edit multiple employees individually, call edit_cell for each one.
 - Use add_filter to narrow the employee list when the user says things like "show only Product", "pull in everyone from Engineering", or "filter to full-time employees". The filter immediately updates which employees are visible in the table.
-- Use set_edit_mode when the user wants to make a correction (e.g. "I need to correct data as of March 1st", "make a correction for last quarter") — set mode to "correction" and the relevant date. Use mode "new-row" when they want to add a new effective-dated record going forward.`;
+- Use set_edit_mode when the user wants to make a correction (e.g. "I need to correct data as of March 1st", "make a correction for last quarter") — set mode to "correction" and the relevant date. Use mode "new-row" when they want to add a new effective-dated record going forward.
+- IMPORTANT: For any math-based edits (percentage increases/decreases, raises, adjustments), NEVER use bulk_edit_column. Instead, read each employee's current value from the table context above, compute the new value individually, and call edit_cell for each employee. For salary values, preserve the "$ X,XXX.XX" format (e.g. "$ 104,500.00"). For example, a 10% raise for employee ID 1 with salary "$ 95,000.00" → edit_cell(employeeId=1, col="salary", value="$ 104,500.00").`;
 }
 
 // ─── API call ─────────────────────────────────────────────────────────────────
